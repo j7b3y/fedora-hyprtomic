@@ -1,0 +1,129 @@
+/* dmenu theme — single column, used for clipboard picker etc. */
+@import "colors"
+
+* {
+    background-color: transparent;
+    text-color:       @text-primary;
+    font:             "Noto Sans 11";
+}
+
+window {
+    width:            820px;
+    location:         center;
+    y-offset:         -40;
+    background-color: @bg-panel;
+    border-radius:    12px;
+    border:           1px;
+    border-color:     @stroke;
+    cursor:           "default";
+    padding:          0px;
+}
+
+mainbox {
+    enabled:          true;
+    children:         [ "inputbar", "listview" ];
+    padding:          12px 18px 14px 18px;
+    background-color: transparent;
+    border:           0px;
+    spacing:          10px;
+}
+
+inputbar {
+    enabled:          true;
+    children:         [ "textbox-prompt", "entry" ];
+    padding:          10px 14px;
+    background-color: @bg-container-60;
+    border-radius:    8px;
+    border:           0px;
+    spacing:          10px;
+    text-color:       @text-primary;
+}
+
+textbox-prompt {
+    enabled:          true;
+    expand:           false;
+    str:              "📋";
+    font:             "Noto Sans 13";
+    background-color: transparent;
+    text-color:       @accent;
+    vertical-align:   0.5;
+}
+
+entry {
+    enabled:          true;
+    background-color: transparent;
+    text-color:       @text-primary;
+    placeholder:      "Type to filter…";
+    placeholder-color: @text-secondary;
+    cursor:           text;
+}
+
+listview {
+    enabled:          true;
+    columns:          1;
+    lines:            12;
+    cycle:            true;
+    scrollbar:        true;
+    flow:             vertical;
+    fixed-height:     true;
+    spacing:          2px;
+    padding:          2px 0;
+    background-color: transparent;
+    cursor:           "default";
+}
+
+element {
+    enabled:          true;
+    orientation:      horizontal;
+    spacing:          0;
+    padding:          8px 12px;
+    cursor:           pointer;
+    background-color: transparent;
+    border-radius:    6px;
+    text-color:       @text-primary;
+}
+
+element normal.normal,
+element alternate.normal {
+    background-color: transparent;
+    text-color:       @text-primary;
+}
+
+element normal.active,
+element alternate.active {
+    background-color: @text-primary-4;
+    text-color:       @text-primary;
+}
+
+element selected.normal,
+element selected.active {
+    background-color: @accent-dim;
+    text-color:       @accent;
+}
+
+element-icon {
+    size:             1em;
+    cursor:           inherit;
+    background-color: transparent;
+    horizontal-align: 0.0;
+    margin:           0 6px 0 0;
+}
+
+element-text {
+    font:             "Noto Sans 11";
+    cursor:           inherit;
+    background-color: transparent;
+    text-color:       inherit;
+    horizontal-align: 0.0;
+    vertical-align:   0.5;
+}
+
+scrollbar {
+    width:            4px;
+    padding:          0;
+    margin:           0 0 0 8px;
+    handle-width:     4px;
+    handle-color:     @text-secondary;
+    background-color: @separator-line;
+    border-radius:    2px;
+}

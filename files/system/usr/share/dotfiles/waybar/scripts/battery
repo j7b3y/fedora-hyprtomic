@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+BAT=/sys/class/power_supply/BAT0
+AC=/sys/class/power_supply/AC
+
+[ -d "$BAT" ] || exit 0
+
+read -r capacity < "$BAT/capacity"
+read -r status < "$BAT/status"
+read -r ac_online < "$AC/online" 2>/dev/null || ac_online=0
+
+icons=("󰂎" "󰁺" "󰁻" "󰁼" "󰁽" "󰁾" "󰁿" "󰂀" "󰂁" "󰂂" "󰁹")
+idx=$((capacity / 10))
+(( idx > 10 )) && idx=10
+icon="${icons[$idx]}"
+
+case "$status" in
+    Charging)        class="charging" ;;
+    Full)            class="charging" ;;
+    "Not charging")  class=$([ "$ac_online" = "1" ] && echo "sustaining" || echo "discharging") ;;
+    Discharging)     class="discharging" ;;
+    *)               class="discharging" ;;
+esac
+
+if (( capacity <= 10 )) && [ "$class" = "discharging" ]; then
+    class="critical"
+elif (( capacity <= 35 )) && [ "$class" = "discharging" ]; then
+    class="warning"
+fi
+
+tooltip="${capacity}% — ${status}"
+if [ "$status" = "Charging" ]; then
+    read -r current_now < "$BAT/current_now" 2>/dev/null
+    read -r voltage_now < "$BAT/voltage_now" 2>/dev/null
+    if [[ "$current_now" =~ ^[0-9]+$ ]] && [[ "$voltage_now" =~ ^[0-9]+$ ]] && (( current_now > 0 )); then
+        wx10=$(( (voltage_now * current_now + 50000000000) / 100000000000 ))
+        tooltip="$tooltip, $((wx10 / 10)).$((wx10 % 10))W"
+    fi
+fi
+[ "$ac_online" = "1" ] && tooltip="$tooltip (AC connected)"
+
+printf '{"text":"%s %d%%","class":"%s","percentage":%d,"tooltip":"%s"}\n' \
+    "$icon" "$capacity" "$class" "$capacity" "$tooltip"

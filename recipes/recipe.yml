@@ -84,14 +84,14 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
   # 3. Build-time scripts: rpmfusion, HyprBind (source build), SDDM theme, uwsm, catppuccin theme, finalize
-  - type: run
+  - type: script
     scripts:
-      - enable-rpmfusion.sh
-      - install-hyprbind.sh
-      - install-sddm-theme.sh
-      - install-uwsm.sh
-      - install-catppuccin-theme.sh
-      - finalize.sh
+      - scripts/enable-rpmfusion.sh
+      - scripts/install-hyprbind.sh
+      - scripts/install-sddm-theme.sh
+      - scripts/install-uwsm.sh
+      - scripts/install-catppuccin-theme.sh
+      - scripts/finalize.sh
 
   # 4. Default Flatpaks (GUI apps default to Flatpak where possible)
   - type: default-flatpaks

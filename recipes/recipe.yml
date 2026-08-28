@@ -50,6 +50,7 @@ modules:
         - waybar
         - dunst
         - swaybg
+        - nwg-dock-hyprland
         # Screenshot / clipboard
         - grim
         - slurp
@@ -73,7 +74,6 @@ modules:
   - type: script
     scripts:
       - install-hyprbind.sh
-      - install-nwg-dock.sh
       - install-sddm-theme.sh
       - install-uwsm.sh
       - install-catppuccin-theme.sh

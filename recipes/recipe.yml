@@ -1,10 +1,10 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: fedora-hyprtomic
-description: Personal Fedora Atomic (uBlue base-main) image with Hyprland + custom Hyprland UI
+description: Personal Fedora Atomic Hyprland image (wayblue base) with custom Hyprland UI
 
-base-image: ghcr.io/ublue-os/base-main
-image-version: latest # tracks latest stable (currently ~F44)
+base-image: ghcr.io/wayblueorg/hyprland
+image-version: latest # wayblue's only supported tag; tracks current Fedora stable
 
 modules:
   # 1. Bake generic dotfiles, SDDM conf, bitwarden polkit rule, setup script, ujust recipe
@@ -17,18 +17,13 @@ modules:
   - type: dnf
     install:
       packages:
-        # Compositor / session
-        - hyprland
-        - hyprlock
-        - hypridle
-        - xdg-desktop-portal-hyprland
+        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
         - quickshell
-        # Display manager + SDDM theme deps
-        - sddm
-        - qt6-svg
-        - qt6-virtualkeyboard
-        - qt6-multimedia
-        - qt6-5compat
+        # SDDM astronaut theme deps
+        - qt6-qtsvg
+        - qt6-qtvirtualkeyboard
+        - qt6-qtmultimedia
+        - qt6-qt5compat
         # Audio
         - pipewire
         - pipewire-pulseaudio
@@ -39,9 +34,7 @@ modules:
         - network-manager-applet
         # Bluetooth (blueman removed; managed via quickshell BluetoothSection)
         - bluez
-        # Auth base
-        - polkit
-        - polkit-gnome
+        # Auth base (polkit + hyprpolkitagent provided by wayblue base)
         - gnome-keyring
         # Qt / theme
         - qt5ct
@@ -66,7 +59,7 @@ modules:
         - brightnessctl
         - playerctl
         - libnotify
-        - dex
+        - dex-autostart
         - python3-gobject
         # Common dev tools (used across all dev envs)
         - git

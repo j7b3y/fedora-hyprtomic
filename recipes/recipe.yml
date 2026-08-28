@@ -69,10 +69,9 @@ modules:
         - zsh
         - zsh-autosuggestions
         - zsh-syntax-highlighting
-  # 3. Build-time scripts: rpmfusion, HyprBind (source build), SDDM theme, uwsm, catppuccin theme, finalize
+  # 3. Build-time scripts (must live in files/scripts/): HyprBind, nwg-dock, SDDM theme, uwsm, catppuccin, finalize
   - type: script
     scripts:
-      - scripts/enable-rpmfusion.sh
       - scripts/install-hyprbind.sh
       - scripts/install-nwg-dock.sh
       - scripts/install-sddm-theme.sh

@@ -69,15 +69,15 @@ modules:
         - zsh
         - zsh-autosuggestions
         - zsh-syntax-highlighting
-  # 3. Build-time scripts (must live in files/scripts/): HyprBind, nwg-dock, SDDM theme, uwsm, catppuccin, finalize
+  # 3. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
-      - scripts/install-hyprbind.sh
-      - scripts/install-nwg-dock.sh
-      - scripts/install-sddm-theme.sh
-      - scripts/install-uwsm.sh
-      - scripts/install-catppuccin-theme.sh
-      - scripts/finalize.sh
+      - install-hyprbind.sh
+      - install-nwg-dock.sh
+      - install-sddm-theme.sh
+      - install-uwsm.sh
+      - install-catppuccin-theme.sh
+      - finalize.sh
 
   # 4. Default Flatpaks (GUI apps default to Flatpak where possible)
   - type: default-flatpaks

@@ -13,11 +13,8 @@ modules:
       - source: system
         destination: /
 
-  # 2. System-layer packages (Fedora names)
+  # 2. System-layer packages (Fedora official repos only; no copr)
   - type: dnf
-    repos:
-      copr:
-        - solopasha/hyprland # rofi-wayland, nwg-dock-hyprland, nwg-displays, hyprpicker
     install:
       packages:
         # Compositor / session
@@ -59,16 +56,12 @@ modules:
         # Bar / notify / launcher
         - waybar
         - dunst
-        - rofi-wayland
         - swaybg
-        - nwg-dock-hyprland
-        - nwg-displays
         # Screenshot / clipboard
         - grim
         - slurp
         - wl-clipboard
         - cliphist
-        - hyprpicker
         # Utilities
         - brightnessctl
         - playerctl
@@ -88,6 +81,7 @@ modules:
     scripts:
       - scripts/enable-rpmfusion.sh
       - scripts/install-hyprbind.sh
+      - scripts/install-nwg-dock.sh
       - scripts/install-sddm-theme.sh
       - scripts/install-uwsm.sh
       - scripts/install-catppuccin-theme.sh

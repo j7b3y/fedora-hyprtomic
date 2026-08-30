@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ou pipefail
-# upstream master uses gotk4 (GTK4) + gtk4-layer-shell; gotk4 needs gobject-introspection .pc
-dnf -y install golang gtk4-devel gtk4-layer-shell-devel glib2-devel gobject-introspection-devel gcc pkgconf-pkg-config || true
+# upstream master uses gotk4 (GTK4) + gtk4-layer-shell; gotk4 also pulls GTK3 subpkgs (atk/gdk3/gtk3)
+dnf -y install golang gtk3-devel gtk4-devel gtk4-layer-shell-devel glib2-devel gobject-introspection-devel atk-devel gcc pkgconf-pkg-config || true
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

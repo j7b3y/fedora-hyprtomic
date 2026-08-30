@@ -92,7 +92,6 @@ modules:
       - install-ghostty.sh
       - install-nwg-dock.sh
       - install-sddm-theme.sh
-      - install-uwsm.sh
       - install-catppuccin-theme.sh
       - install-clipryx.sh
       - install-hypr-emoji-picker.sh

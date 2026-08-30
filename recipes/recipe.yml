@@ -67,6 +67,16 @@ modules:
         - file-roller
         - ffmpegthumbnailer
         - tumbler
+        # IME (native fcitx5 + mozc = auto Japanese input; hazkey engine stays manual)
+        - fcitx5
+        - fcitx5-mozc
+        - fcitx5-gtk
+        - fcitx5-qt
+        - fcitx5-configtool
+        # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
+        - wtype
+        - python3-cairo
+        - google-noto-color-emoji-fonts
         # Common dev tools (used across all dev envs)
         - git
         - git-credential-oauth
@@ -84,6 +94,9 @@ modules:
       - install-sddm-theme.sh
       - install-uwsm.sh
       - install-catppuccin-theme.sh
+      - install-clipryx.sh
+      - install-hypr-emoji-picker.sh
+      - install-snipland.sh
       - finalize.sh
 
   # 4. Default Flatpaks (system scope = auto-provisioned "standard" apps)

@@ -39,11 +39,14 @@ ujust choose-kernel kernel-cachyos    # switch to the CachyOS kernel, then reboo
 
 Note: the Linux Lite kernel is not available for Fedora Atomic, so `kernel-cachyos` is used as the "latest/optimized kernel" substitute.
 
-GUI apps default to Flatpak (Flathub). Install the user-side tools the configs reference:
+GUI apps default to Flatpak (Flathub). The image auto-provisions the standard set:
 
-- `ghostty` (terminal), `nemo` (file manager), `bitwarden`, `org.gnome.Loupe`
-- IME: fcitx5 + hazkey via Flatpak
-- helpers: `clipryx`, `hypr-emoji-picker`, `snipland` (Flatpak or source build)
+- **ghostty** (terminal, copr `scottames/ghostty`), **nemo** + extensions (dnf), **firefox / loupe / bitwarden** (system flatpak)
+- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snipland** (snipping) — source-built (best-effort, non-fatal)
+- **fcitx5 + mozc** (Japanese input) via native dnf, with IM env + autostart baked into `hyprland.conf`
+
+Manual (not auto-installable):
+- **fcitx5-hazkey** engine: not on Flathub/Fedora. Build from the gist's flatpak manifest if you specifically want hazkey (mozc covers Japanese input meanwhile).
 
 ## ISO
 

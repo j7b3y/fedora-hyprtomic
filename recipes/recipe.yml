@@ -61,6 +61,12 @@ modules:
         - libnotify
         - dex-autostart
         - python3-gobject
+        # File manager (Fedora official; promoted from user-later to system standard)
+        - nemo
+        - nemo-extensions
+        - file-roller
+        - ffmpegthumbnailer
+        - tumbler
         # Common dev tools (used across all dev envs)
         - git
         - git-credential-oauth
@@ -73,17 +79,18 @@ modules:
   - type: script
     scripts:
       - install-hyprbind.sh
+      - install-ghostty.sh
       - install-nwg-dock.sh
       - install-sddm-theme.sh
       - install-uwsm.sh
       - install-catppuccin-theme.sh
       - finalize.sh
 
-  # 4. Default Flatpaks (GUI apps default to Flatpak where possible)
+  # 4. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
       - notify: true
-        scope: user
+        scope: system
         install:
           - org.mozilla.firefox
           - org.gnome.Loupe

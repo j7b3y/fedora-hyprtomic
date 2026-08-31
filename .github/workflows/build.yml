@@ -27,7 +27,7 @@ jobs:
       # On push to main / schedule it publishes + signs :latest.
       # Job id is 'bluebuild' (no matrix) => required status check name = "bluebuild".
       - name: Build Custom Image
-        uses: blue-build/github-action@v1.11
+        uses: blue-build/github-action@v1.12
         with:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}

@@ -1,30 +1,20 @@
 #!/usr/bin/env bash
 set -ou pipefail
-# copr (scottames/ghostty) is Anubis-blocked from GitHub CI runners, so use the
-# community AppImage from GitHub releases (github.com is reachable). Runs without
-# FUSE via --appimage-extract-and-run. Non-fatal.
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-ASSET="$(curl -fsSL --retry 3 \
-  https://api.github.com/repos/pkgforge-dev/ghostty-appimage/releases/latest \
-  | grep -oP '"browser_download_url":\s*"\K[^"]*x86_64\.AppImage' | head -1 || true)"
-
-if [ -z "$ASSET" ]; then
-  echo "### ghostty: no AppImage asset found (non-fatal) ###"
-  exit 0
-fi
-
-if ! curl -fL --retry 3 -o /opt/Ghostty.AppImage "$ASSET"; then
-  echo "### ghostty AppImage download failed (non-fatal) ###"
-  rm -f /opt/Ghostty.AppImage
-  exit 0
-fi
-
-chmod +x /opt/Ghostty.AppImage
-cat > /usr/local/bin/ghostty <<'EOF'
-#!/bin/sh
-exec /opt/Ghostty.AppImage --appimage-extract-and-run "$@"
+# ghostty via copr scottames/ghostty (stable releases; .desktop/icon included).
+# Write the repo file directly pointing at the CDN (download.copr...) to avoid the
+# Anubis-protected api_3 host. Non-fatal.
+# (alt: boydkelly/ghostty-tip for nightly builds)
+cat > /etc/yum.repos.d/_copr_scottames_ghostty.repo <<'EOF'
+[copr:copr.fedorainfracloud.org:scottames:ghostty]
+name=Copr repo for ghostty owned by scottames
+baseurl=https://download.copr.fedorainfracloud.org/results/scottames/ghostty/fedora-$releasever-$basearch/
+type=rpm-md
+skip_if_unavailable=True
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/scottames/ghostty/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
 EOF
-chmod +x /usr/local/bin/ghostty
-echo "### ghostty installed from AppImage ###"
+
+dnf -y install ghostty || echo "### ghostty not installed (non-fatal) ###"

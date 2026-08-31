@@ -96,6 +96,7 @@ modules:
       - install-clipryx.sh
       - install-hypr-emoji-picker.sh
       - install-snipland.sh
+      - install-hazkey.sh
       - finalize.sh
 
   # 4. Default Flatpaks (system scope = auto-provisioned "standard" apps)

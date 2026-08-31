@@ -67,9 +67,8 @@ modules:
         - file-roller
         - ffmpegthumbnailer
         - tumbler
-        # IME (native fcitx5 + mozc = auto Japanese input; hazkey engine stays manual)
+        # IME (native fcitx5; hazkey engine installed via copr; profile enables it)
         - fcitx5
-        - fcitx5-mozc
         - fcitx5-gtk
         - fcitx5-qt
         - fcitx5-configtool

@@ -93,6 +93,12 @@ ln -sf "$SRC/hyprbind/hyprbind-theme.css" "$CFG/hyprbind/hyprbind-theme.css"
 # opencode
 ln -sf "$SRC/opencode/opencode.jsonc" "$CFG/opencode/opencode.jsonc"
 
+# fcitx5 input method profile (hazkey enabled; copy so it stays user-writable)
+mkdir -p "$CFG/fcitx5"
+if [ ! -f "$CFG/fcitx5/profile" ] && [ -f "$SRC/fcitx5/profile" ]; then
+  cp "$SRC/fcitx5/profile" "$CFG/fcitx5/profile"
+fi
+
 # assets
 ln -sf "$SRC/assets/wallpaper.jpg" "$SHARE/backgrounds/wallpaper.jpg"
 

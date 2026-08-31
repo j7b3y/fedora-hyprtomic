@@ -2,12 +2,12 @@ name: bluebuild
 on:
   schedule:
     - cron:
-        "00 06 * * *" # build at 06:00 UTC every day
-        # (20 minutes after last ublue images start building)
+        "0 6 * * 1" # weekly (Mon 06:00 UTC) — cheaper pace; still auto-pulls latest base updates
   push:
+    branches:
+      - main # only main publishes; dev/* pushes are validated via PR instead
     paths-ignore: # don't rebuild if only documentation has changed
       - "**.md"
-
   pull_request:
   workflow_dispatch: # allow manually triggering builds
 concurrency:
@@ -16,27 +16,34 @@ concurrency:
   cancel-in-progress: true
 jobs:
   bluebuild:
-    name: Build Custom Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-    strategy:
-      fail-fast: false # stop GH from cancelling all matrix builds if one fails
-      matrix:
-        recipe:
-          # !! Add your recipes here
-          - recipe.yml
     steps:
-      # the build is fully handled by the reusable github action
+      # The build is fully handled by the reusable github action.
+      # On pull_request it builds a PR-scoped image (does not touch :latest).
+      # On push to main / schedule it publishes + signs :latest.
+      # Job id is 'bluebuild' (no matrix) => required status check name = "bluebuild".
       - name: Build Custom Image
         uses: blue-build/github-action@v1.11
         with:
-          recipe: ${{ matrix.recipe }}
+          recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
-
-          # enabled by default, disable if your image is small and you want faster builds
           maximize_build_space: true
+
+      # Tag the freshly published :latest with today's date for easy rollback.
+      - name: Tag image with date
+        if: github.event_name != 'pull_request'
+        run: |
+          sudo apt-get update && sudo apt-get install -y skopeo
+          DATE=$(date +%Y.%m.%d)
+          IMAGE="ghcr.io/${{ github.repository }}"
+          echo "Tagging $IMAGE:latest as $IMAGE:$DATE"
+          skopeo copy \
+            --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
+            "docker://$IMAGE:latest" \
+            "docker://$IMAGE:$DATE"

@@ -1,45 +1,111 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
-# image will be published to ghcr.io/<user>/<name>
 name: fedora-hyprtomic
-# description will be included in the image's metadata
-description: This is my personal OS image.
+description: Personal Fedora Atomic Hyprland image (wayblue base) with custom Hyprland UI
 
-# the base image to build on top of (FROM) and the version tag to use
-base-image: ghcr.io/ublue-os/silverblue-main
-image-version: latest # You can pin to a specific version of Fedora as well
+base-image: ghcr.io/wayblueorg/hyprland
+image-version: latest # wayblue's only supported tag; tracks current Fedora stable
 
-# module configuration, executed in order
-# you can include multiple instances of the same module
 modules:
+  # 1. Bake generic dotfiles, SDDM conf, bitwarden polkit rule, setup script, ujust recipe
   - type: files
     files:
       - source: system
-        destination: / # copies files/system/* (* means everything inside it) into your image's root folder /
+        destination: /
 
+  # 2. System-layer packages (Fedora official repos only; no copr)
   - type: dnf
-    repos:
-      copr:
-        - atim/starship
     install:
       packages:
-        - micro
-        - starship
-    remove:
-      packages:
-        # example: removing firefox (in favor of the flatpak)
-        # "firefox" is the main package, "firefox-langpacks" is a dependency
-        - firefox
-        - firefox-langpacks # also remove firefox dependency (not required for all packages, this is a special case)
+        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
+        - quickshell
+        # SDDM astronaut theme deps
+        - qt6-qtsvg
+        - qt6-qtvirtualkeyboard
+        - qt6-qtmultimedia
+        - qt6-qt5compat
+        # Audio
+        - pipewire
+        - pipewire-pulseaudio
+        - wireplumber
+        - pavucontrol
+        # Network
+        - NetworkManager
+        - network-manager-applet
+        # Bluetooth (blueman removed; managed via quickshell BluetoothSection)
+        - bluez
+        # Auth base (polkit + hyprpolkitagent provided by wayblue base)
+        - gnome-keyring
+        # Qt / theme
+        - qt5ct
+        - qt6ct
+        - kvantum
+        - qt5-qtwayland
+        - papirus-icon-theme
+        # Fonts
+        - google-noto-sans-fonts
+        - google-noto-sans-cjk-fonts
+        - fontawesome-fonts
+        # Bar / notify / launcher
+        - waybar
+        - dunst
+        - swaybg
+        # Screenshot / clipboard
+        - grim
+        - slurp
+        - wl-clipboard
+        - cliphist
+        # Utilities
+        - brightnessctl
+        - playerctl
+        - libnotify
+        - dex-autostart
+        - python3-gobject
+        # File manager (Fedora official; promoted from user-later to system standard)
+        - nemo
+        - nemo-extensions
+        - file-roller
+        - ffmpegthumbnailer
+        - tumbler
+        # IME (native fcitx5; hazkey engine installed via copr; profile enables it)
+        - fcitx5
+        - fcitx5-gtk
+        - fcitx5-qt
+        - fcitx5-configtool
+        # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
+        - wtype
+        - python3-cairo
+        - google-noto-color-emoji-fonts
+        # Common dev tools (used across all dev envs)
+        - git
+        - git-credential-oauth
+        - python3-pip
+        - android-tools
+        - zsh
+        - zsh-autosuggestions
+        - zsh-syntax-highlighting
+  # 3. Build-time scripts (live in files/scripts/; reference by bare filename)
+  - type: script
+    scripts:
+      - install-hyprbind.sh
+      - install-ghostty.sh
+      - install-nwg-dock.sh
+      - install-sddm-theme.sh
+      - install-catppuccin-theme.sh
+      - install-clipryx.sh
+      - install-hypr-emoji-picker.sh
+      - install-snipland.sh
+      - install-hazkey.sh
+      - finalize.sh
 
+  # 4. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
-      - notify: true # Send notification after install/uninstall is finished (true/false)
+      - notify: true
         scope: system
-        # If no repo information is specified, Flathub will be used by default
-        install: # system flatpaks we want all users to have and not remove
+        install:
           - org.mozilla.firefox
           - org.gnome.Loupe
-      - scope: user # Also add Flathub user repo, but no user packages
+          - com.bitwarden.desktop
 
-  - type: signing # this sets up the proper policy & signing files for signed images to work fully
+  - type: signing # proper policy & signing for signed images

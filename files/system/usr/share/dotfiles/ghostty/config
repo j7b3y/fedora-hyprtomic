@@ -1,0 +1,68 @@
+# Ghostty Configuration
+# Alacritty の見た目を再現 + ネイティブタブ管理
+
+# ── Colors (Alacritty から移植) ──
+background = #000000
+foreground = #ffffff
+
+palette = 0=#000000
+palette = 1=#ff0000
+palette = 2=#00ff00
+palette = 3=#ffff00
+palette = 4=#0080ff
+palette = 5=#ff00ff
+palette = 6=#00ffff
+palette = 7=#ffffff
+
+palette = 8=#808080
+palette = 9=#ff5555
+palette = 10=#55ff55
+palette = 11=#ffff55
+palette = 12=#5555ff
+palette = 13=#ff55ff
+palette = 14=#55ffff
+palette = 15=#ffffff
+
+cursor-color = #ffffff
+cursor-text = #000000
+selection-foreground = #000000
+selection-background = #ffffff
+
+# ── Font ──
+font-family = "HackGen Console NF"
+font-size = 12
+
+# ── Window ──
+window-padding-x = 0
+window-padding-y = 0
+background-opacity = 0.9
+gtk-titlebar = false
+window-decoration = none
+window-show-tab-bar = auto
+window-theme = ghostty
+window-titlebar-background = #000000
+window-titlebar-foreground = #ffffff
+gtk-toolbar-style = flat
+gtk-tabs-location = bottom
+gtk-custom-css = ~/.config/ghostty/gtk.css
+
+# ── Cursor ──
+cursor-style = block
+cursor-style-blink = false
+
+# ── Misc ──
+term = xterm-256color
+confirm-close-surface = false
+mouse-hide-while-typing = true
+
+# ── Keybinds (タブ管理) ──
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+q=close_tab:this
+keybind = ctrl+shift+arrow_left=previous_tab
+keybind = ctrl+shift+arrow_right=next_tab
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+
+# ── Keybinds (コピー・ペースト) ──
+keybind = ctrl+shift+c=copy_to_clipboard:mixed
+keybind = ctrl+shift+v=paste_from_clipboard

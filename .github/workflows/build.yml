@@ -16,25 +16,20 @@ concurrency:
   cancel-in-progress: true
 jobs:
   bluebuild:
-    name: Build Custom Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
-    strategy:
-      fail-fast: false # stop GH from cancelling all matrix builds if one fails
-      matrix:
-        recipe:
-          - recipe.yml
     steps:
       # The build is fully handled by the reusable github action.
       # On pull_request it builds a PR-scoped image (does not touch :latest).
       # On push to main / schedule it publishes + signs :latest.
+      # Job id is 'bluebuild' (no matrix) => required status check name = "bluebuild".
       - name: Build Custom Image
         uses: blue-build/github-action@v1.11
         with:
-          recipe: ${{ matrix.recipe }}
+          recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}

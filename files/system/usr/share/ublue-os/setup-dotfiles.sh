@@ -6,7 +6,7 @@ CFG="$HOME/.config"
 LOC="$HOME/.local"
 SHARE="$LOC/share"
 
-mkdir -p "$CFG"/{hypr/scripts,waybar/scripts,rofi,dunst,nwg-dock-hyprland,Kvantum,quickshell,qt5ct,qt6ct,gtk-3.0,gtk-4.0,hyprbind,opencode,ghostty}
+mkdir -p "$CFG"/{hypr/scripts,waybar/scripts,rofi,dunst,nwg-dock-hyprland,Kvantum,quickshell,qt5ct,qt6ct,gtk-3.0,gtk-4.0,hyprbind,opencode,ghostty,fastfetch}
 mkdir -p "$SHARE"/{backgrounds,icons,nemo/actions/scripts}
 mkdir -p "$HOME/.local/bin"
 
@@ -92,6 +92,10 @@ ln -sf "$SRC/hyprbind/hyprbind-theme.css" "$CFG/hyprbind/hyprbind-theme.css"
 
 # opencode
 ln -sf "$SRC/opencode/opencode.jsonc" "$CFG/opencode/opencode.jsonc"
+
+# fastfetch (HyprTomic raw ANSI logo)
+ln -sf "$SRC/fastfetch/config.jsonc" "$CFG/fastfetch/config.jsonc"
+ln -sf "$SRC/fastfetch/logo.txt" "$CFG/fastfetch/logo.txt"
 
 # fcitx5 input method profile (hazkey enabled; copy so it stays user-writable)
 mkdir -p "$CFG/fcitx5"

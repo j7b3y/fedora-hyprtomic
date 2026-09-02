@@ -34,6 +34,9 @@ jobs:
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
           maximize_build_space: true
+          # Layer cache to ghcr: unchanged modules (dnf package layer etc.) are
+          # pulled from the registry on the next build instead of rebuilding.
+          use_cache: true
 
       # Tag the freshly published :latest with today's date for easy rollback.
       - name: Tag image with date

@@ -1,0 +1,11 @@
+[Unit]
+Description=HyprTomic first boot: assign a unique hostname
+After=systemd-machine-id-commit.service
+ConditionPathExists=!/var/lib/hyprtomic/.hostname-set
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/hyprtomic/setup-hostname.sh
+
+[Install]
+WantedBy=multi-user.target

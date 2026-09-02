@@ -1,0 +1,22 @@
+[Unit]
+Description=HyprTomic first boot: create a user account if none exists
+DefaultDependencies=no
+Conflicts=getty@tty1.service
+After=systemd-user-sessions.service systemd-machine-id-commit.service
+Before=multi-user.target
+ConditionPathExists=!/var/lib/hyprtomic/.user-created
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+ExecStartPre=-/usr/sbin/plymouth quit
+ExecStart=/usr/libexec/hyprtomic/firstboot-user.sh
+
+[Install]
+WantedBy=multi-user.target

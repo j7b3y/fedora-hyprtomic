@@ -50,7 +50,17 @@ Manual (not auto-installable):
 
 ## ISO
 
-If build on Fedora Atomic, you can generate an offline ISO with the instructions available [here](https://blue-build.org/how-to/generate-iso/#_top). These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
+Generate an offline installer from the published image (run on Fedora/WSL; builds the ostree payload into Fedora's anaconda media):
+
+```bash
+sudo bluebuild generate-iso --iso-name hyprtomic.iso -V kinoite --web-ui image ghcr.io/j7b3y/fedora-hyprtomic:latest
+```
+
+- `--web-ui`: uses Fedora's modern bootc installer (anaconda-webui), whose flow includes a user-creation page. Recommended.
+- If web-ui is unavailable in your environment, try `-V server` (classic anaconda, asks for user setup at install time) or the default `-V kinoite`.
+- As a safety net for any path where no user was created, the image ships a first-boot wizard (`hyprtomic-firstboot-user.service`): if no regular user exists, it prompts on tty1 before SDDM starts. The hostname is also auto-set once to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`).
+
+These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
 
 ## Verification
 

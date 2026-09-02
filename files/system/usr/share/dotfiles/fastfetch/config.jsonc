@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fastfetch-cli/fastfetch/dev/doc/schema.json",
+  "logo": {
+    "type": "raw",
+    "source": "~/.config/fastfetch/logo.txt",
+    "padding": {
+      "left": 0,
+      "top": 0
+    }
+  }
+}

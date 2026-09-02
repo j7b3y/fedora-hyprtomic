@@ -13,6 +13,19 @@ modules:
       - source: system
         destination: /
 
+  # 1.5 Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
+  - type: os-release
+    properties:
+      NAME: "HyprTomic"
+      PRETTY_NAME: "HyprTomic (powered by Fedora Atomic)"
+      VARIANT: "HyprTomic"
+      VARIANT_ID: "hyprtomic"
+      HOME_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      DOCUMENTATION_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      SUPPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      DEFAULT_HOSTNAME: "hyprtomic"
+
   # 2. System-layer packages (Fedora official repos only; no copr)
   - type: dnf
     install:
@@ -61,6 +74,7 @@ modules:
         - libnotify
         - dex-autostart
         - python3-gobject
+        - fastfetch
         # File manager (Fedora official; promoted from user-later to system standard)
         - nemo
         - nemo-extensions

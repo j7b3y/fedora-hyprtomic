@@ -11,6 +11,10 @@ git clone --depth 1 https://github.com/Keyitdev/sddm-astronaut-theme.git "$TMP/s
 mkdir -p "$THEME"
 cp -r "$TMP/sddm-theme/." "$THEME/"
 
+# Default wallpaper: theme.conf references Backgrounds/wallpaper.jpg (relative to theme dir)
+mkdir -p "$THEME/Backgrounds"
+cp /usr/share/dotfiles/assets/wallpaper.jpg "$THEME/Backgrounds/wallpaper.jpg"
+
 if [ -f /usr/share/dotfiles/sddm/theme.conf ]; then
   mkdir -p "$THEME/Themes"
   cp /usr/share/dotfiles/sddm/theme.conf "$THEME/Themes/custom.conf"

@@ -48,6 +48,20 @@ GUI apps default to Flatpak (Flathub). The image auto-provisions the standard se
 Manual (not auto-installable):
 - **fcitx5-hazkey** engine: not on Flathub/Fedora. Build from the gist's flatpak manifest if you specifically want hazkey (mozc covers Japanese input meanwhile).
 
+### btrfs compression tuning (optional, run once after install)
+
+Fedora Atomic installs on btrfs with `compress=zstd:1` by default. To move root to zstd:5 — note that since F42 (composefs) **root mount options in /etc/fstab are ignored**; they must go into the kernel arguments ([common issue](https://discussion.fedoraproject.org/t/root-mount-options-are-ignored-in-fedora-atomic-desktops-42-and-later/148562)):
+
+```bash
+findmnt -no TARGET,OPTIONS / /var /home   # check current state
+sudo rpm-ostree kargs --delete=rootflags=subvol=root --append=rootflags=subvol=root,compress=zstd:5
+sudo sed -i 's/compres…zstd:5/' /etc/fstab && sudo systemctl daemon-reload
+sudo reboot
+# force-compress existing data
+sudo btrfs fi defragment -r -c zstd /var /home
+# verify: sudo dnf install -y btrfs-progs; btrfs filesystem du -s /var | btrfs filesystem show is fine too
+```
+
 ## ISO
 
 Generate an offline installer from the published image (run on Fedora/WSL; builds the ostree payload into Fedora's anaconda media):
@@ -56,9 +70,12 @@ Generate an offline installer from the published image (run on Fedora/WSL; build
 sudo bluebuild generate-iso --iso-name hyprtomic.iso -V kinoite image ghcr.io/j7b3y/fedora-hyprtomic:latest
 ```
 
-- If the installer still doesn't offer user creation with the default `-V kinoite`, try `-V server` (classic anaconda, asks for user setup at install time).
+- User creation happens **inside the installer** (anaconda shows the User Creation hub) as long as the live media uses a non-GNOME profile. The profile is picked from the *installer* environment's os-release `VARIANT_ID`, which is why the `-V` flag matters:
+  - `-V kinoite` (recommended) or `-V server`: user creation page is shown at install time.
+  - `-V silverblue` / any GNOME-family profile: anaconda intentionally removes the user screens and expects gnome-initial-setup, which this image does not ship — you end up at the SDDM login with no user. This is what bit earlier ISO builds.
+  - Verify in the installer shell (Ctrl+Alt+F2): `/tmp/anaconda.log` should log the detected profile (e.g. `fedora-kinoite`).
 - Do **not** use `--web-ui`: anaconda-webui is experimental in this builder and crashes at startup leaving a gray/blank screen (RHBZ 2308279).
-- As a safety net for any path where no user was created, the image ships a first-boot wizard (`hyprtomic-firstboot-user.service`): if no regular user exists, it prompts on tty1 before SDDM starts. The hostname is also auto-set once to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`).
+- The hostname is auto-set once on first boot to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`), replacing wayblue's `DEFAULT_HOSTNAME`.
 - If the ISO itself boots to a gray screen: switch to a text console with `Ctrl+Alt+F2` to inspect logs, or add `nomodeset` to the kernel line in GRUB (press `e` at the boot menu) to rule out graphics issues.
 
 These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.

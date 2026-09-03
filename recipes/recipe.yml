@@ -117,11 +117,10 @@ modules:
       - install-hazkey.sh
       - finalize.sh
 
-  # 5. Enable firstboot services (user creation fallback + unique hostname)
+  # 5. Enable firstboot services (unique hostname per machine)
   - type: systemd
     system:
       enabled:
-        - hyprtomic-firstboot-user.service
         - hyprtomic-hostname.service
 
   # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)

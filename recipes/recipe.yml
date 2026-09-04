@@ -7,13 +7,11 @@ base-image: ghcr.io/wayblueorg/hyprland
 image-version: latest # wayblue's only supported tag; tracks current Fedora stable
 
 modules:
-  # 1. Bake generic dotfiles, SDDM conf, bitwarden polkit rule, setup script, ujust recipe
-  - type: files
-    files:
-      - source: system
-        destination: /
+  # NOTE: module order matters for layer caching. Slow-but-stable layers (dnf) go
+  # first; frequently-edited layers (files/scripts) go last so dotfile tweaks
+  # don't invalidate the package layer.
 
-  # 1.5 Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
+  # 1. Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
   - type: os-release
     properties:
       NAME: "HyprTomic"
@@ -98,7 +96,14 @@ modules:
         - zsh
         - zsh-autosuggestions
         - zsh-syntax-highlighting
-  # 3. Build-time scripts (live in files/scripts/; reference by bare filename)
+
+  # 3. Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
       - install-hyprbind.sh
@@ -112,7 +117,13 @@ modules:
       - install-hazkey.sh
       - finalize.sh
 
-  # 4. Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  # 5. Enable firstboot services (unique hostname per machine)
+  - type: systemd
+    system:
+      enabled:
+        - hyprtomic-hostname.service
+
+  # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
       - notify: true

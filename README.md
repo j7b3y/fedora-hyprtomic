@@ -67,18 +67,8 @@ sudo btrfs fi defragment -r -c zstd /var /home
 Generate an offline installer from the published image (run on Fedora/WSL; builds the ostree payload into Fedora's anaconda media):
 
 ```bash
-sudo bluebuild generate-iso --iso-name hyprtomic.iso -V kinoite image ghcr.io/j7b3y/fedora-hyprtomic:latest
+sudo bluebuild generate-iso --iso-name hyprtomic.iso -V server image ghcr.io/j7b3y/fedora-hyprtomic:latest
 ```
-
-- User creation happens **inside the installer** (anaconda shows the User Creation hub) as long as the live media uses a non-GNOME profile. The profile is picked from the *installer* environment's os-release `VARIANT_ID`, which is why the `-V` flag matters:
-  - `-V kinoite` (recommended) or `-V server`: user creation page is shown at install time.
-  - `-V silverblue` / any GNOME-family profile: anaconda intentionally removes the user screens and expects gnome-initial-setup, which this image does not ship — you end up at the SDDM login with no user. This is what bit earlier ISO builds.
-  - Verify in the installer shell (Ctrl+Alt+F2): `/tmp/anaconda.log` should log the detected profile (e.g. `fedora-kinoite`).
-- Do **not** use `--web-ui`: anaconda-webui is experimental in this builder and crashes at startup leaving a gray/blank screen (RHBZ 2308279).
-- The hostname is auto-set once on first boot to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`), replacing wayblue's `DEFAULT_HOSTNAME`.
-- If the ISO itself boots to a gray screen: switch to a text console with `Ctrl+Alt+F2` to inspect logs, or add `nomodeset` to the kernel line in GRUB (press `e` at the boot menu) to rule out graphics issues.
-
-These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
 
 ## Verification
 

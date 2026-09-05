@@ -5,8 +5,9 @@ SRC=/usr/share/dotfiles
 CFG="$HOME/.config"
 LOC="$HOME/.local"
 SHARE="$LOC/share"
+OVERWRITE="${OVERWRITE:-0}"
 
-mkdir -p "$CFG"/{hypr/scripts,waybar/scripts,rofi,dunst,nwg-dock-hyprland,Kvantum,quickshell,qt5ct,qt6ct,gtk-3.0,gtk-4.0,hyprbind,opencode,ghostty,fastfetch}
+mkdir -p "$CFG"/{hypr/scripts,waybar/scripts,rofi/themes,dunst,nwg-dock-hyprland,Kvantum,quickshell,qt5ct,qt6ct,gtk-3.0,gtk-4.0,hyprbind,opencode,ghostty,fastfetch}
 mkdir -p "$SHARE"/{backgrounds,icons,nemo/actions/scripts}
 mkdir -p "$HOME/.local/bin"
 
@@ -21,7 +22,7 @@ for f in "$SRC"/hypr/scripts/*; do
 done
 
 # host.conf (optional per-device overrides; safe no-op if absent)
-if [ ! -f "$CFG/hypr/host.conf" ]; then
+if [ "$OVERWRITE" = "1" ] || [ ! -f "$CFG/hypr/host.conf" ]; then
   cat > "$CFG/hypr/host.conf" <<'EOF'
 # Optional per-device overrides.
 # Uncomment to pin the dock (and optionally waybar) to your primary output:
@@ -30,7 +31,7 @@ EOF
 fi
 
 # waybar (generic config; device-specific layout is optional user-supplied)
-if [ ! -f "$CFG/waybar/config" ]; then
+if [ "$OVERWRITE" = "1" ] || [ ! -f "$CFG/waybar/config" ]; then
   cp "$SRC/waybar/config" "$CFG/waybar/config"
 fi
 ln -sf "$SRC/waybar/style.css" "$CFG/waybar/style.css"
@@ -73,8 +74,18 @@ ln -sf "$SRC/qt6ct/qt6ct.conf" "$CFG/qt6ct/qt6ct.conf"
 ln -sf "$SRC/gtk-3.0/settings.ini" "$CFG/gtk-3.0/settings.ini"
 ln -sf "$SRC/gtk-4.0/settings.ini" "$CFG/gtk-4.0/settings.ini"
 
-# quickshell
-ln -sfn "$SRC/quickshell"/* "$CFG/quickshell/" 2>/dev/null || true
+# quickshell (everything except current-theme is a symlink; the theme
+# selection is user-writable state, so it must be a copy -- writing through a
+# symlink would hit the read-only /usr)
+for f in "$SRC"/quickshell/*; do
+  [ -e "$f" ] || continue
+  base="$(basename "$f")"
+  [ "$base" = "current-theme" ] && continue
+  ln -sfn "$f" "$CFG/quickshell/$base"
+done
+if [ "$OVERWRITE" = "1" ] || [ ! -f "$CFG/quickshell/current-theme" ]; then
+  cp "$SRC/quickshell/current-theme" "$CFG/quickshell/current-theme"
+fi
 for f in "$SRC"/quickshell/scripts/*.sh; do
   [ -e "$f" ] || continue
   chmod +x "$f"
@@ -99,7 +110,7 @@ ln -sf "$SRC/fastfetch/logo.txt" "$CFG/fastfetch/logo.txt"
 
 # fcitx5 input method profile (hazkey enabled; copy so it stays user-writable)
 mkdir -p "$CFG/fcitx5"
-if [ ! -f "$CFG/fcitx5/profile" ] && [ -f "$SRC/fcitx5/profile" ]; then
+if { [ "$OVERWRITE" = "1" ] || [ ! -f "$CFG/fcitx5/profile" ]; } && [ -f "$SRC/fcitx5/profile" ]; then
   cp "$SRC/fcitx5/profile" "$CFG/fcitx5/profile"
 fi
 

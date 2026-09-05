@@ -116,6 +116,8 @@ modules:
       - install-snipland.sh
       - install-hazkey.sh
       - finalize.sh
+      # Needs finalize.sh first (chmods setup-dotfiles.sh)
+      - install-skel.sh
 
   # 5. Enable firstboot services (unique hostname per machine)
   - type: systemd

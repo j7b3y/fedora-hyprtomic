@@ -32,10 +32,23 @@ The `latest` tag will automatically point to the latest build. That build will s
 
 ## Post-install (first login)
 
+Fresh installs need **nothing**: the dotfiles layout is baked into `/etc/skel` at build
+time, so the account created by the installer is fully configured on first login
+(configs are symlinks into `/usr/share/dotfiles` and refresh automatically on image
+updates).
+
+Only a machine that was **rebased** onto this image (account predates it, `$HOME`
+bypasses skel) needs a one-time sync:
+
 ```bash
-ujust setup-dotfiles                  # link baked Hyprland/quickshell/waybar/... configs into ~/.config
+ujust setup-dotfiles                  # safe: skips files you have customized
+ujust overwrite=1 setup-dotfiles      # force-refresh the user-editable copies
 ujust choose-kernel kernel-cachyos    # switch to the CachyOS kernel, then reboot
 ```
+
+(The `overwrite=1` variable must come *before* the recipe name — that is how `just`
+parses its CLI. Commit `~/.config` to git before a forced overwrite if it holds
+customizations.)
 
 Note: the Linux Lite kernel is not available for Fedora Atomic, so `kernel-cachyos` is used as the "latest/optimized kernel" substitute.
 

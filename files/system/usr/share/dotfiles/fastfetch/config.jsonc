@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fastfetch-cli/fastfetch/dev/doc/schema.json",
   "logo": {
-    "type": "raw",
+    "type": "auto",
     "source": "~/.config/fastfetch/logo.txt",
     "padding": {
       "left": 0,

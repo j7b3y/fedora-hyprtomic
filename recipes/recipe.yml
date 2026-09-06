@@ -15,8 +15,8 @@ modules:
   - type: os-release
     properties:
       NAME: "HyprTomic"
-      PRETTY_NAME: "HyprTomic (powered by Fedora Atomic)"
-      VARIANT: "HyprTomic"
+      PRETTY_NAME: "Hyprtomic (powered by Fedora Atomic)"
+      VARIANT: "Hyprtomic"
       VARIANT_ID: "hyprtomic"
       HOME_URL: "https://github.com/j7b3y/fedora-hyprtomic"
       DOCUMENTATION_URL: "https://github.com/j7b3y/fedora-hyprtomic"
@@ -94,8 +94,6 @@ modules:
         - python3-pip
         - android-tools
         - zsh
-        - zsh-autosuggestions
-        - zsh-syntax-highlighting
 
   # 2b. UI deps referenced by the baked configs (dotfiles arch/lua shelf/waybar
   # /launcher). skip-unavailable: not all packages exist on every Fedora branch.

@@ -55,11 +55,23 @@ Note: the Linux Lite kernel is not available for Fedora Atomic, so `kernel-cachy
 GUI apps default to Flatpak (Flathub). The image auto-provisions the standard set:
 
 - **ghostty** (terminal, copr `scottames/ghostty`), **nemo** + extensions (dnf), **firefox / loupe / bitwarden** (system flatpak)
-- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snipland** (snipping) — source-built (best-effort, non-fatal)
-- **fcitx5 + mozc** (Japanese input) via native dnf, with IM env + autostart baked into `hyprland.conf`
+- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snip**/snipland (snipping), **hyprbind**, **nwg-dock-hyprland**, **uwsm** — source-built into `/usr/bin` (best-effort, non-fatal; **not** `/usr/local`, which is `/var/usrlocal` on ostree and never ships in the image)
+- **fcitx5 + hazkey** (Japanese input) via native dnf + copr `cocoa/hazkey`, with IM env + autostart baked into `hyprland.lua`
 
-Manual (not auto-installable):
-- **fcitx5-hazkey** engine: not on Flathub/Fedora. Build from the gist's flatpak manifest if you specifically want hazkey (mozc covers Japanese input meanwhile).
+## Dotfiles reference
+
+The baked config tree (`files/system/usr/share/dotfiles` → `/usr/share/dotfiles`)
+mirrors the private **`dotfiles` repo, `arch/lua` branch** — Hyprland's Lua config
+(`hyprland.lua`, preferred over `.conf` on Hyprland 0.55+), the custom `quadgrid`
+tiling layout for big screens (`hypr/layouts/quadgrid.lua`, applied via the
+user-editable `~/.config/hypr/host.lua`), and the quickshell shelf/launcher.
+
+Fedora-side adaptations kept intentionally generic (no device-specific values):
+
+- Arch-only tools replaced by image equivalents: `clipse`→`clipryx`, `hypremoji`→`hypr-emoji-picker`, polkit-gnome→`hyprpolkitagent`
+- No cursor theme (license) — GTK/hypr cursor settings left to the desktop default
+- No hardcoded monitors/users: primary output comes from `host.lua` (default: all outputs), waybar ships a generic bottom "shelf" config matching `waybar/style.css`, Nerd Font glyphs provided by `cascadia-mono-nf-fonts`
+- fastfetch config lists explicit modules (a user config fully replaces the defaults; without `modules` only the logo printed)
 
 ### btrfs compression tuning (optional, run once after install)
 

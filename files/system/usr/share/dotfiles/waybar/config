@@ -1,6 +1,119 @@
 {
-  "layer": "top",
-  "modules-left": ["hyprland/workspaces"],
-  "modules-center": ["hyprland/window"],
-  "modules-right": ["pulseaudio", "network", "clock"]
+  // 汎用 waybar シェルフ。基準: dotfiles arch/lua の waybar/style.css
+  // (window#waybar は上隅 rounded + border-top = 画面下部固定前提のデザイン)。
+  // 位置は bottom、レイヤーは windows の下 (layer: bottom) にし、
+  // 画面に固定 (always-on-top) されないようにする。
+  "layer": "bottom",
+  "position": "bottom",
+  "height": 48,
+  "spacing": 4,
+  "margin": 0,
+  "icon-theme": "Papirus-Dark",
+  "modules-left": ["custom-launcher", "hyprland/workspaces", "hyprland/taskbar"],
+  "modules-center": [],
+  "modules-right": [
+    "tray",
+    "custom-notifications",
+    "custom-date",
+    "clock",
+    "pulseaudio",
+    "network",
+    "custom-bluetooth",
+    "custom-battery",
+    "custom-power",
+    "custom-spacer-right"
+  ],
+
+  "custom-launcher": {
+    "format": "◉",
+    "tooltip": false,
+    "on-click": "qs ipc call launcher toggle"
+  },
+
+  "hyprland/workspaces": {
+    "format": "{id}",
+    "active-only": false,
+    "all-outputs": true,
+    "persistent-workspaces": {}
+  },
+
+  "hyprland/taskbar": {
+    "format": "{icon}",
+    "icon-size": 24,
+    "tooltip-format": "{title}",
+    "on-button-middle": "close"
+  },
+
+  "tray": {
+    "icon-size": 16,
+    "spacing": 8
+  },
+
+  "custom-notifications": {
+    "exec": "~/.config/waybar/scripts/notifications",
+    "interval": 2,
+    "tooltip": false,
+    "on-click": "qs ipc call notifications toggle"
+  },
+
+  "custom-date": {
+    "exec": "date '+%a %d'",
+    "interval": 60,
+    "tooltip": false
+  },
+
+  "clock": {
+    "format": "{:%H:%M}",
+    "tooltip-format": "<tt><big><b>{calendar}</b></big></tt>",
+    "interval": 60
+  },
+
+  "pulseaudio": {
+    "format": "{volume}%",
+    "format-bluetooth": "{volume}% BT",
+    "format-muted": "MUTED",
+    "scroll-step": 5,
+    "on-click": "pavucontrol",
+    "tooltip": false
+  },
+
+  "network": {
+    "format-wifi": "{essid}",
+    "format-ethernet": "ETH",
+    "format-disconnected": "NET",
+    "tooltip": false,
+    "interval": 5
+  },
+
+  "custom-bluetooth": {
+    "exec": "~/.config/waybar/scripts/bluetooth",
+    "return-type": "json",
+    "interval": 10,
+    "tooltip": false,
+    "on-click": "blueman-manager"
+  },
+
+  "custom-battery": {
+    "exec": "~/.config/waybar/scripts/battery",
+    "return-type": "json",
+    "interval": 30,
+    "tooltip": true
+  },
+
+  // バッテリ-less デスクトップ向けの右端アイコン
+  "custom-power": {
+    "format": "⏻",
+    "tooltip": false,
+    "on-click": "qs ipc call powermenu toggle"
+  },
+
+  "custom-spacer-right": {
+    "format": " ",
+    "tooltip": false,
+    "interval": "once"
+  },
+
+  "hyprland/window": {
+    "separate-outputs": true
+  }
 }

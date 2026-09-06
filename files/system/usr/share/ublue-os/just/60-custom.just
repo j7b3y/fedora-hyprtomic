@@ -5,7 +5,7 @@ overwrite := "0"
 # Fresh installs get this layout automatically (baked into /etc/skel); this
 # recipe is for rebased machines whose account predates the image. Re-running
 # is safe: symlinks are refreshed, user-edited copies are left alone.
-# overwrite=1 also replaces the user-editable copies (hypr/host.conf,
+# overwrite=1 also replaces the user-editable copies (hypr/host.lua,
 # waybar/config, fcitx5/profile, quickshell/current-theme) with the image
 # defaults -- commit ~/.config to git first if it holds customizations.
 setup-dotfiles:

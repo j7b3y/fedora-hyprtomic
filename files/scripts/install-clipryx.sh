@@ -19,8 +19,8 @@ if ! [ -x "$TMP/publish/clipryx" ]; then
   exit 0
 fi
 
-mkdir -p /usr/local/lib/clipryx
-cp -r "$TMP/publish/." /usr/local/lib/clipryx/
-chmod +x /usr/local/lib/clipryx/clipryx
-ln -sf /usr/local/lib/clipryx/clipryx /usr/local/bin/clipryx
+mkdir -p /usr/lib/clipryx
+cp -r "$TMP/publish/." /usr/lib/clipryx/
+chmod +x /usr/lib/clipryx/clipryx
+ln -sf /usr/lib/clipryx/clipryx /usr/bin/clipryx
 dnf -y remove dotnet-sdk-10.0 dotnet-sdk || true

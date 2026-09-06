@@ -9,5 +9,5 @@ if ! git clone --depth 1 https://github.com/AnrokX/snipland.git /usr/share/snipl
 fi
 
 chmod +x /usr/share/snipland/snip 2>/dev/null || true
-ln -sf /usr/share/snipland/snip /usr/local/bin/snip
-ln -sf /usr/share/snipland/snip /usr/local/bin/snipland
+ln -sf /usr/share/snipland/snip /usr/bin/snip
+ln -sf /usr/share/snipland/snip /usr/bin/snipland

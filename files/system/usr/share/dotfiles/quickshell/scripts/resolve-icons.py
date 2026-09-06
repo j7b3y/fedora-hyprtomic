@@ -153,9 +153,6 @@ def _scan_desktop_icons() -> list[str]:
     app_dirs = [
         "/usr/share/applications",
         "/usr/local/share/applications",
-        "/run/current-system/sw/share/applications",
-        "/etc/profiles/per-user/underdone/share/applications",
-        os.path.expanduser("~/.nix-profile/share/applications"),
         os.path.expanduser("~/.local/share/applications"),
         "/var/lib/flatpak/exports/share/applications",
         os.path.expanduser("~/.local/share/flatpak/exports/share/applications"),

@@ -20,7 +20,7 @@ if [ "$rc" -ne 0 ]; then
   exit 0
 fi
 
-install -Dm755 "$TMP/dock/bin/nwg-dock-hyprland" /usr/local/bin/nwg-dock-hyprland
+install -Dm755 "$TMP/dock/bin/nwg-dock-hyprland" /usr/bin/nwg-dock-hyprland
 mkdir -p /usr/share/nwg-dock-hyprland
 cp -r "$TMP/dock/images" /usr/share/nwg-dock-hyprland/ 2>/dev/null || true
 cp -r "$TMP/dock/config/." /usr/share/nwg-dock-hyprland/ 2>/dev/null || true

@@ -97,6 +97,20 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
 
+  # 2b. UI stack referenced by the baked configs (dotfiles arch/lua 基準の
+  # shelf/waybar/launcher が必要とするもの)。 Fedora ブランチにより一部が
+  # 未収録の可能性があるので skip-unavailable。
+  - type: dnf
+    install:
+      skip-unavailable: true
+      packages:
+        # rofi: shelf SearchButton (drun) + hyprland.lua SUPER+Escape (window)
+        - rofi-wayland
+        # hyprpicker: hyprland.lua SUPER+SHIFT+P 色ピッカー
+        - hyprpicker        # Nerd Font PUA (U+F0000+) グリフ: quickshell StatusArea と
+        # waybar custom-* スクリプトの 󰁹/󰂯 等は FontAwesome/標準 Noto に無い
+        - cascadia-mono-nf-fonts
+
   # 3. Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
   - type: files
     files:
@@ -114,6 +128,7 @@ modules:
       - install-clipryx.sh
       - install-hypr-emoji-picker.sh
       - install-snipland.sh
+      - install-uwsm.sh
       - install-hazkey.sh
       - finalize.sh
       # Needs finalize.sh first (chmods setup-dotfiles.sh)

@@ -1,1 +1,10 @@
+# Runtime scripts/configs must be LF (they execute on Linux); binaries stay raw.
+*.sh text eol=lf
+*.lua text eol=lf
 files/system/usr/share/dotfiles/fastfetch/logo.txt text eol=lf
+files/system/usr/share/dotfiles/fastfetch/config.jsonc text eol=lf
+files/system/usr/share/dotfiles/waybar/config text eol=lf
+files/system/usr/share/dotfiles/waybar/scripts/* text eol=lf
+files/system/usr/share/dotfiles/zsh/* text eol=lf
+files/system/usr/share/dotfiles/quickshell/scripts/* text eol=lf
+files/system/usr/share/dotfiles/**/*.jpg binary

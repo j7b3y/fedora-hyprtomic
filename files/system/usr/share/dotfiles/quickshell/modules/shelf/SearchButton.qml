@@ -43,6 +43,6 @@ Item {
 
     Process {
         id: rofiProc
-        command: ["rofi", "-show", "drun", "-theme", "/home/mcx/.config/rofi/themes/launcher.rasi"]
+        command: ["rofi", "-show", "drun"]
     }
 }

@@ -6,6 +6,6 @@ set -euxo pipefail
 # /etc/skel) get the dotfiles on first login with no manual step. Symlinks
 # are copied as symlinks by useradd, so they keep pointing into the read-only
 # /usr/share/dotfiles and image updates propagate automatically; the
-# user-editable pieces (host.conf, waybar config, fcitx5 profile) land as
+# user-editable pieces (host.lua, waybar config, fcitx5 profile) land as
 # regular per-user files.
 HOME=/etc/skel /usr/share/ublue-os/setup-dotfiles.sh

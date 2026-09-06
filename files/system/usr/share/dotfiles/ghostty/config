@@ -29,7 +29,10 @@ selection-foreground = #000000
 selection-background = #ffffff
 
 # ── Font ──
-font-family = "HackGen Console NF"
+# Arch 基準 (dotfiles arch/lua) は HackGen Console NF (AUR) を使うが Fedora 公式に無いため、
+# イメージ収録の Nerd Font 系に読み替える (2b の cascadia-mono-nf-fonts)。
+font-family = "Cascadia Mono NF"
+font-family = "Noto Sans Mono CJK JP"
 font-size = 12
 
 # ── Window ──

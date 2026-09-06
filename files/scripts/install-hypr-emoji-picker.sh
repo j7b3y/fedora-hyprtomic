@@ -17,4 +17,4 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   cat "$TMP/b.log"
   exit 0
 fi
-install -Dm755 "$TMP/ep/target/release/hypr-emoji-picker" /usr/local/bin/hypr-emoji-picker
+install -Dm755 "$TMP/ep/target/release/hypr-emoji-picker" /usr/bin/hypr-emoji-picker

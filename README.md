@@ -33,16 +33,31 @@ The `latest` tag will automatically point to the latest build. That build will s
 ## Post-install (first login)
 
 Fresh installs need **nothing**: the dotfiles layout is baked into `/etc/skel` at build
-time, so the account created by the installer is fully configured on first login
-(configs are symlinks into `/usr/share/dotfiles` and refresh automatically on image
-updates).
+time, so the installer-created account is fully configured on first login.
+
+Two delivery modes (`/usr/share/ublue-os/setup-dotfiles.sh`):
+
+- **Symlinked** (session plumbing; image updates fix them automatically):
+  hypr (`hyprland.lua`, `layouts/`, scripts, hypridle/lock), quickshell tree,
+  waybar style/scripts, fastfetch, Kvantum/Qt/GTK theming, nemo actions, wallpaper
+- **User-owned copies** (first-login defaults; image updates never overwrite
+  them): `~/.zshrc`, ghostty, rofi themes, dunst, hyprbind theme, nwg-dock style,
+  opencode, `waybar/config`, `hypr/host.lua`, fcitx5 profile,
+  `quickshell/current-theme` — reset with `ujust overwrite=1 setup-dotfiles`
+
+`zsh` is set as the default login shell on first boot
+(`hyprtomic-zsh-default.service`, one-shot) and `~/.zplug` (plugin manager) is seeded
+into every new home; add plugins under the zplug block in `~/.zshrc`.
+Login-screen wallpaper: `ujust login-wallpaper <image>` (persisted in host state,
+survives updates; delete `/usr/local/share/sddm/themes/hyprtomic-login` and
+`/etc/sddm.conf.d/zz-wallpaper.conf` to revert).
 
 Only a machine that was **rebased** onto this image (account predates it, `$HOME`
 bypasses skel) needs a one-time sync:
 
 ```bash
 ujust setup-dotfiles                  # safe: skips files you have customized
-ujust overwrite=1 setup-dotfiles      # force-refresh the user-editable copies
+ujust overwrite=1 setup-dotfiles      # force-refresh the user-owned copies
 ujust choose-kernel kernel-cachyos    # switch to the CachyOS kernel, then reboot
 ```
 

@@ -1,6 +1,6 @@
-/* Ghostty タブバー - Pure Black ベース + 白色系で視認性向上 */
+/* Ghostty tab bar - Pure Black, high-contrast white accents */
 
-/* タブバー全体の背景 */
+/* tab bar background */
 tabbar > revealer > box {
     background-color: #121212;
     background-image: none;
@@ -9,7 +9,7 @@ tabbar > revealer > box {
     border-top: 1px solid #2a2a2a;
 }
 
-/* 各タブ (非アクティブ) */
+/* inactive tab */
 tabbar tab {
     background-color: #121212;
     background-image: none;
@@ -20,7 +20,7 @@ tabbar tab {
     transition: 100ms;
 }
 
-/* アクティブタブ */
+/* active tab */
 tabbar tab:selected {
     background-color: #1e1e1e;
     background-image: none;
@@ -28,26 +28,26 @@ tabbar tab:selected {
     border-bottom: 3px solid #ffffff;
 }
 
-/* ホバー時 */
+/* hover */
 tabbar tab:hover:not(:selected) {
     background-color: #181818;
     background-image: none;
     color: #dddddd;
 }
 
-/* タブ区切り線を消す */
+/* hide tab separators */
 tabbar tab separator {
     background-color: transparent;
 }
 
-/* 新規タブボタン */
+/* new-tab action bars */
 tabbar startactionbar,
 tabbar endactionbar {
     background-color: #121212;
     background-image: none;
 }
 
-/* 新規タブ + ボタン */
+/* action buttons */
 tabbar startactionbar button,
 tabbar endactionbar button {
     color: #999999;
@@ -61,7 +61,7 @@ tabbar endactionbar button:hover {
     background-color: #1e1e1e;
 }
 
-/* スクロール可能タブの矢印 */
+/* scrollable tab area */
 tabbar scrolledwindow {
     background-color: #121212;
 }

@@ -97,18 +97,20 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
 
-  # 2b. UI stack referenced by the baked configs (dotfiles arch/lua 基準の
-  # shelf/waybar/launcher が必要とするもの)。 Fedora ブランチにより一部が
-  # 未収録の可能性があるので skip-unavailable。
+  # 2b. UI deps referenced by the baked configs (dotfiles arch/lua shelf/waybar
+  # /launcher). skip-unavailable: not all packages exist on every Fedora branch.
+  # uwsm (required by the quickshell launcher) is not in Fedora repos at all;
+  # it is source-built by install-uwsm.sh.
   - type: dnf
     install:
       skip-unavailable: true
       packages:
-        # rofi: shelf SearchButton (drun) + hyprland.lua SUPER+Escape (window)
+        # shelf SearchButton (drun) + SUPER+Escape window switcher
         - rofi-wayland
-        # hyprpicker: hyprland.lua SUPER+SHIFT+P 色ピッカー
-        - hyprpicker        # Nerd Font PUA (U+F0000+) グリフ: quickshell StatusArea と
-        # waybar custom-* スクリプトの 󰁹/󰂯 等は FontAwesome/標準 Noto に無い
+        # SUPER+SHIFT+P color picker
+        - hyprpicker
+        # Nerd Font PUA glyphs (U+F0000+) used by quickshell StatusArea and
+        # the waybar custom-* scripts; missing from FontAwesome/standard Noto
         - cascadia-mono-nf-fonts
 
   # 3. Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
@@ -134,11 +136,12 @@ modules:
       # Needs finalize.sh first (chmods setup-dotfiles.sh)
       - install-skel.sh
 
-  # 5. Enable firstboot services (unique hostname per machine)
+  # 5. Enable firstboot services (unique hostname per machine; zsh default shell)
   - type: systemd
     system:
       enabled:
         - hyprtomic-hostname.service
+        - hyprtomic-zsh-default.service
 
   # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks

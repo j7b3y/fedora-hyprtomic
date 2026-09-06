@@ -1,28 +1,41 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // 構造的権限ブロック - AGENTS.md の soft instruction を hard block で補完
   "permission": {
-    "bash": {
-      "*": "allow",
-      "*sudo*": "deny",
-      "yay -S *": "deny",
-      "rm -rf *": "deny",
-      "rm -fr *": "deny"
-    }
-  },
-  "disabled_providers": [],
-  "provider": {
-    "openwebui": {
-      "name": "openwebui",
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "https://ai.n4ne.com/api"
-      },
-      "models": {
-        "selfhost": {
-          "name": "selfhost"
-        }
-      }
-    }
+    "*": "ask",
+      "bash": {
+        "*": "ask",
+        "git status": "allow",
+        "git diff": "allow",
+        "git log": "allow",
+        "npm run": "allow", 
+        "rm *": "deny",
+        "sudo *": "deny",
+        "grep *": "allow"
+    },
+    "task": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "codesearch": "allow",
+    "todowrite": "allow",
+    "todoread": "allow",
+    "question": "allow",
+    "lsp": "allow",
+    "skill": "ask",
+    "external_directory": "ask", 
+    "doom_loop": "ask" 
+    },
+    "watcher": {
+      "ignore": [
+        "node_modules/**",
+        ".git/**",
+        "vendor/**",
+        "dist/**",
+        "build/**",
+        "*.log",
+        ".opencode/**",
+        "__pycache__/**",
+        ".next/**",
+        "coverage/**"
+      ]
   }
 }

@@ -8,7 +8,6 @@ setopt hist_ignore_dups
 setopt hist_ignore_all_dups
 
 # Alias
-alias claude='claude --model claude-sonnet-5 --enable-auto-mode --append-system-prompt-file ~/claude.md'
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 
@@ -64,19 +63,19 @@ if [[ "${terminfo[kdch1]}" != "" ]]; then bindkey "${terminfo[kdch1]}" delete-ch
 if [[ "${terminfo[khome]}" != "" ]]; then bindkey "${terminfo[khome]}" beginning-of-line; fi
 if [[ "${terminfo[kend]}"  != "" ]]; then bindkey "${terminfo[kend]}"  end-of-line; fi
 
-# Plugins (install with your package manager or manually)
-# zsh-autosuggestions
-[[ -f /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh ]] && \
-    source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+# zplug (cloned into ~/.zplug by setup-dotfiles.sh; user-owned)
+export ZPLUG_HOME="$HOME/.zplug"
+if [[ -s "$ZPLUG_HOME/init.zsh" ]]; then
+    source "$ZPLUG_HOME/init.zsh"
 
-# zsh-syntax-highlighting
-[[ -f /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
-    source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+    # add/remove plugins here, e.g.:
+    # zplug "zsh-users/zsh-completions"
+    zplug "zsh-users/zsh-completions"
+    zplug "zsh-users/zsh-autosuggestions"
+    zplug "mollifier/cd-gitroot"
+    zplug "zsh-users/zsh-syntax-highlighting", defer:2
+    zplug "b4b4r07/enhancd", use:init.sh
 
-export SSH_AUTH_SOCK=~/.bitwarden-ssh-agent.sock
-
-# opencode
-export PATH=/home/underdone/.opencode/bin:$PATH
-
-# kimi-code
-export PATH="/home/underdone/.kimi-code/bin:$PATH"
+    zplug check || zplug install
+    zplug load
+fi

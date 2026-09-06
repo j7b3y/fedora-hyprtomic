@@ -1,13 +1,10 @@
--- Hyprland Configuration (Lua)
--- 基準: dotfiles リポジトリ arch/lua ブランチ (hypr/hyprland.lua)。
--- Fedora Atomic 向け adapted 版: Arch 専用ツール (clipse/hypremoji/polkit-gnome) は
--- イメージ側の代替 (clipryx/hypr-emoji-picker/hyprpolkitagent) に読替え、デバイス固有の
--- 値 (特定モニタ名・カーソルテーマ) は持たせない。
--- ~/.config/hypr/hyprland.lua が存在すると .conf より優先される。
--- デフォルトレイアウトは標準 dwindle。カスタムレイアウト quadgrid (layouts/quadgrid.lua)
--- は登録のみ行い、適用は host.lua (ユーザー作成) に委ねる。
+-- Hyprland configuration (Lua), based on the dotfiles repo arch/lua branch.
+-- Fedora Atomic adaptations: clipse/hypremoji/polkit-gnome replaced by
+-- clipryx/hypr-emoji-picker/hyprpolkitagent; no device-specific values
+-- (primary output comes from host.lua; dock falls back to all outputs).
+-- Layout is dwindle by default; quadgrid (layouts/quadgrid.lua) is only
+-- registered here and applied per-host from host.lua.
 
--- Monitor - auto detect (host 設定で上書き)
 hl.monitor({
     output   = "",
     mode     = "preferred",
@@ -21,15 +18,14 @@ local fileManager = "nemo"
 local menu        = "qs ipc call launcher toggle"
 local mainMod     = "SUPER"
 
--- Host-specific settings: ~/.config/hypr/host.lua (setup-dotfiles.sh がテンプレを生成)
+-- Per-device overrides (template created by setup-dotfiles.sh)
 local hostOk, host = pcall(require, "host")
 if not hostOk or type(host) ~= "table" then
     host = {}
 end
--- 未設定なら空文字 = ドックは全出力に表示 (device 固定を bake しない)
 local monitorPrimary = host.monitor_primary or ""
 
--- カスタムレイアウト登録 (~/.config/hypr/layouts/quadgrid.lua 経由。無ければ skip)
+-- Custom layout registration (skipped when layouts/ is not linked)
 local quadgridOk, quadgrid = pcall(require, "layouts.quadgrid")
 if not quadgridOk then
     quadgrid = nil
@@ -43,7 +39,7 @@ hl.env("XCURSOR_SIZE", "36")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
--- fcitx5 input method (Fedora: IM env はセッション側で明示が必要)
+-- fcitx5 input method (must be exported by the session on Fedora)
 hl.env("GTK_IM_MODULE", "fcitx")
 hl.env("QT_IM_MODULE", "fcitx")
 hl.env("XMODIFIERS", "@im=fcitx")
@@ -81,13 +77,12 @@ hl.config({
         layout           = "dwindle",
     },
 
-    -- Group (tabs) - integrated with terminal window
+    -- Group (tabs); auto_group off keeps chrome out of groups
     group = {
         col = {
             border_active   = "rgba(ffffffcc)",
             border_inactive = "rgba(808080aa)",
         },
-        -- auto_group=false: chrome 等の自動グループ参加を防止
         auto_group = false,
         groupbar = {
             enabled   = true,
@@ -192,9 +187,8 @@ hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("hyprbind"), { desc = "キーバイ�
 hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal), { desc = "ターミナルを開く (単体)" })
 hl.bind(mainMod .. " + X", hl.dsp.window.close(), { desc = "アクティブウィンドウを閉じる" })
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager), { desc = "ファイルマネージャを開く" })
--- タイル窓を float 化すると直前のタイルサイズがそのまま採用され画面をほぼ覆ってしまう
--- (windowrule の max_size は togglefloating では再評価されず効かない実測済み) ため、
--- float 化した直後に限り明示的に上限までリサイズしてセンタリングする
+-- togglefloating keeps the last tiled size, so cap + center the window
+-- right after floating it (windowrule max_size is not re-evaluated)
 hl.bind(mainMod .. " + F", function()
     local w = hl.get_active_window()
     local wasFloating = w and w.floating
@@ -226,7 +220,7 @@ hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }), { desc = "
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }),    { desc = "フォーカス移動: 上" })
 hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }),   { desc = "フォーカス移動: 下" })
 
--- Move window (quadgrid 上では隣接セルへ移動。先客が居れば縮小して同居)
+-- Move window (on quadgrid: move to the adjacent cell, cohabiting if occupied)
 local function moveWindowAction(dir)
     if quadgrid then
         return quadgrid.move_or_swap(dir)
@@ -250,11 +244,9 @@ hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("hyprpicker -a -f hex"), { de
 hl.bind(mainMod .. " + DELETE", hl.dsp.exec_cmd("qs ipc call powermenu toggle"), { desc = "電源メニュー" })
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("qs ipc call controlcenter toggle"), { desc = "コントロールセンター" })
 
--- Ghostty ネイティブタブを使用 (Ctrl+Shift+T/Q/←/→ は Ghostty が処理)
-
 -- Workspaces
 for i = 1, 10 do
-    local key = i % 10 -- 10 は 0 キー
+    local key = i % 10 -- 10 is the 0 key
     hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = tostring(i) }),
         { desc = "ワークスペース " .. i .. " へ" })
     hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = tostring(i) }),
@@ -282,11 +274,11 @@ hl.bind(mainMod .. " + CTRL + down",  hl.dsp.window.resize({ x = 0,   y = 20,  r
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true, desc = "マウスドラッグでウィンドウリサイズ" })
 if quadgrid then
-    -- quadgrid のタイルはドロップしたセルに配置 (drag = ドラッグ後のボタンリリースで発火)
+    -- place the tile into the cell it was dropped on (fires on button release)
     hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag_end, { drag = true, desc = "quadgrid: ドロップ先セルに配置" })
 end
 
--- Locked bindings - work on lock screen
+-- Locked bindings (work on the lock screen)
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"),
     { locked = true, repeating = true, desc = "音量を上げる" })
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
@@ -306,7 +298,7 @@ hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true, desc = "前の曲" })
 
 -- Regular bindings
-hl.bind(mainMod .. " + V",      hl.dsp.exec_cmd("clipryx"),          { desc = "クリップボード履歴" })
+hl.bind(mainMod .. " + V",      hl.dsp.exec_cmd("clipryx"),           { desc = "クリップボード履歴" })
 hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("hypr-emoji-picker"), { desc = "絵文字ピッカー" })
 
 -- Window rules

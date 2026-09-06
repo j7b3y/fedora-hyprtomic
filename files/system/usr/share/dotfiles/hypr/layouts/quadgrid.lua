@@ -1,27 +1,26 @@
--- quadgrid: タイルの最大サイズを 2x2 セル (モニタと同アスペクト比 = 16:9) に制限する。
--- 各ウィンドウは 4 セルのどこにでも自由に配置できる (sticky cell)。
--- ユーザーが動かした窓と新規窓以外は勝手に動かさない:
---   * 新規ウィンドウは占有数が最少のセルへ (同数なら右下→左下→右上→左上)
---   * 同一セルの複数ウィンドウは dwindle と同じ再帰二分割で同居する
---     (古い窓ほど大きい区画を維持、新しい窓が最後の区画をさらに半分割)
---   * セルへの移動 (キー/マウス) は先客を退かさず同居 (先客が縮んでスペースを空ける)
---   * ウィンドウが閉じて空いたセルはそのまま空きになる (自動で詰めない)
---   * SUPER+SHIFT+矢印 (move_or_swap): 隣のセルへ移動。
---     グリッド端では本体の movewindow にフォールバック (モニタ間移動を維持)
---   * マウスドラッグ (on_drag_end): ドロップした位置のセルへ移動。
---     ※ C++ 側 (CLuaTiledAlgorithm::movedTarget) はドロップ位置を無視するため自前処理
+-- quadgrid: caps every tile at a 2x2 cell (same aspect ratio as the monitor).
+-- Windows may sit in any of the 4 cells (sticky placement):
+--   * new windows take the least-occupied cell (priority: BR, BL, TR, TL)
+--   * several windows in one cell split it recursively like dwindle
+--     (older windows keep the larger region)
+--   * moving into an occupied cell cohabits instead of displacing
+--   * cells freed by closing stay empty (no repacking)
+--   * SUPER+SHIFT+arrows (move_or_swap): adjacent cell; at the grid border
+--     it falls back to the built-in movewindow (keeps cross-monitor moves)
+--   * mouse drag (on_drag_end): drop position decides the cell
+--     (the C++ side ignores it, so we resolve it here)
 --
--- 使い方: require するだけで登録・イベント購読される。適用は workspace_rule の
--- layout = "lua:quadgrid" (host.lua)。
+-- Usage: requiring this file registers the layout and its events; applying it
+-- is a workspace rule `layout = "lua:quadgrid"` (set it in host.lua).
 
 local M = {}
 
 M.LAYOUT_NAME = "lua:quadgrid"
 
-local cellOf = {} -- window address → セル番号 (行優先: 1=左上 2=右上 3=左下 4=右下)
-local PREFER = { 4, 3, 2, 1 } -- 空きセルの割当順 (右下アンカー)
+local cellOf = {} -- window address -> cell (row-major: 1=TL 2=TR 3=BL 4=BR)
+local PREFER = { 4, 3, 2, 1 } -- free-cell assignment order (bottom-right anchor)
 
--- 隣接セル: ADJ[dir][from] = to (nil はグリッド端)
+-- adjacency: ADJ[dir][from] = to (nil = grid border)
 local ADJ = {
     left  = { [2] = 1, [4] = 3 },
     right = { [1] = 2, [3] = 4 },
@@ -33,8 +32,7 @@ local function isTile(w)
     return w.mapped and not w.floating and not w.hidden
 end
 
--- dwindle と同じ再帰二分割: 直近の区画を長辺方向に半分割し続ける。
--- k=3 なら 大きい1枚 + 縦に並んだ2枚 (左右いずれかは box の縦横比次第) になる
+-- dwindle-style recursive split of the last region (half along the long edge)
 local function dwindleSplit(box, k)
     local boxes = { box }
     for _ = 2, k do
@@ -53,7 +51,7 @@ end
 
 hl.layout.register("quadgrid", {
     recalculate = function(ctx)
-        -- C++ 側がドラッグ等で同一 target を再 append することがあるため重複排除
+        -- C++ may append the same target twice (drags etc.); dedupe
         local targets, seen = {}, {}
         for _, t in ipairs(ctx.targets) do
             local addr = t.window and t.window.address
@@ -68,7 +66,7 @@ hl.layout.register("quadgrid", {
             return
         end
 
-        -- セル割当: 記憶があればそのセル、無ければ占有数最少のセルへ
+        -- assign remembered cells first, pending ones to the emptiest cell
         local byCell = { {}, {}, {}, {} }
         local pending = {}
         for _, t in ipairs(targets) do
@@ -94,8 +92,7 @@ hl.layout.register("quadgrid", {
             end
         end
 
-        -- 配置: 1 枚ならセルそのまま、複数は dwindle と同じ再帰二分割
-        -- (group はセルに入った順=古い窓ほど大きい区画を維持する)
+        -- one window keeps its cell; multiple split it dwindle-style
         for c = 1, 4 do
             local group = byCell[c]
             local k = #group
@@ -110,7 +107,7 @@ hl.layout.register("quadgrid", {
         end
     end,
 
-    -- "refresh" はセル割当変更後の再配置トリガとして使う
+    -- "refresh" triggers relayout after cell-assignment changes
     layout_msg = function(_, msg)
         if msg == "refresh" then
             return true
@@ -119,12 +116,11 @@ hl.layout.register("quadgrid", {
     end,
 })
 
--- アクティブワークスペースのレイアウトに再配置させる
 local function refresh()
     hl.dispatch(hl.dsp.layout("refresh"))
 end
 
--- w をセル to へ移動。先客が居ても退かさず同居 (セル内分割)
+-- move w into cell `to`, cohabiting (in-cell split) if occupied
 local function moveToCell(w, to)
     if cellOf[w.address] == to then
         return
@@ -133,7 +129,7 @@ local function moveToCell(w, to)
     refresh()
 end
 
--- quadgrid 上のアクティブなタイル窓なら window, workspace を返す
+-- returns window, workspace when the active tiled window is on quadgrid
 local function activeQuadgridTile()
     local w = hl.get_active_window()
     local ws = w and w.workspace
@@ -143,7 +139,7 @@ local function activeQuadgridTile()
     return nil, nil
 end
 
--- SUPER+SHIFT+矢印用のバインドアクションを返す
+-- bind action for SUPER+SHIFT+arrows
 function M.move_or_swap(dir)
     local move = hl.dsp.window.move({ direction = dir })
     return function()
@@ -151,7 +147,7 @@ function M.move_or_swap(dir)
         local from = w and cellOf[w.address]
         local to = from and ADJ[dir][from]
         if not to then
-            -- quadgrid 以外 / グリッド端 (モニタ間移動など) は本体に任せる
+            -- other layouts / grid border: defer to the built-in dispatcher
             hl.dispatch(move)
             return
         end
@@ -159,7 +155,7 @@ function M.move_or_swap(dir)
     end
 end
 
--- SUPER+LMB ドラッグ終了時 (bind の drag フラグ) に呼ぶ: カーソル位置のセルへ配置
+-- SUPER+LMB drag end (bind drag flag): place into the dropped-on cell
 function M.on_drag_end()
     local w = activeQuadgridTile()
     if not w then
@@ -179,7 +175,7 @@ function M.on_drag_end()
     moveToCell(w, (row - 1) * 2 + col)
 end
 
--- 閉じたウィンドウのセル記憶を破棄
+-- forget cells of destroyed windows
 hl.on("window.destroy", function()
     local alive = {}
     for _, w in ipairs(hl.get_windows()) do

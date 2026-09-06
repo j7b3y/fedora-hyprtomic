@@ -2,3 +2,4 @@
 set -oue pipefail
 chmod +x /usr/share/ublue-os/setup-dotfiles.sh
 chmod +x /usr/libexec/hyprtomic/setup-hostname.sh
+chmod +x /usr/libexec/hyprtomic/setup-zsh.sh

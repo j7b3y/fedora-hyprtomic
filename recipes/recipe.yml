@@ -49,7 +49,12 @@ modules:
         # (>= Hyprland 0.55 required for the Lua config)
 
         # GUI shell (illogical-impulse): quickshell + Material You theming
-        - quickshell-git
+        # NOTE: quickshell uses Qt PRIVATE APIs (qt6-qtbase is tightly coupled),
+        # so it must come from the same source that built against the current
+        # base Qt (6.11). Fedora official ships the same 0.2.1^git generation
+        # rebuilt for the current Qt; the COPR's quickshell-git is still built
+        # against Qt 6.10 and hard-fails dep resolution (Qt_6.10_PRIVATE_API).
+        - quickshell
         - matugen
         - microtex # LaTeX widget (installed as /opt/MicroTeX)
         - darkly

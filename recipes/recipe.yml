@@ -24,20 +24,22 @@ modules:
       BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
       DEFAULT_HOSTNAME: "hyprtomic"
 
-  # 2. COPRs for the illogical-impulse GUI deps
-  #    (mirrors upstream sdata/dist-fedora/feddeps.toml; hyprland itself stays
-  #    on the wayblue base image, so sdegler/hyprland is intentionally NOT added)
-  - type: copr
-    source: ririko66z/dots-hyprland # quickshell-git, matugen, microtex, breeze-plus, ii font set
-  - type: copr
-    source: deltacopy/darkly        # Qt style (kdeglobals widgetStyle=Darkly)
-  - type: copr
-    source: alternateved/eza
-  - type: copr
-    source: atim/starship
-
-  # 3. System-layer packages
+  # 2. COPRs for the illogical-impulse GUI deps + system-layer packages.
+  #    Repo files live in files/dnf/ (download.copr CDN pattern, mirroring the
+  #    install-ghostty.sh / install-hazkey.sh workaround for the Anubis-blocked
+  #    COPR API host) and are removed after the module (cleanup: true) so the
+  #    COPR bits stay frozen at build time -- the equivalent of upstream's
+  #    `dnf versionlock quickshell-git`.
+  #    Note: hyprland itself stays on the wayblue base image, so sdegler/hyprland
+  #    is intentionally NOT added.
   - type: dnf
+    repos:
+      cleanup: true
+      files:
+        - ririko66z-dots-hyprland.repo # quickshell-git, matugen, microtex, breeze-plus, ii font set
+        - deltacopy-darkly.repo        # Qt style (kdeglobals widgetStyle=Darkly)
+        - alternateved-eza.repo
+        - atim-starship.repo
     install:
       # Not every package above exists on every Fedora branch / COPR build;
       # skip-unavailable keeps the image buildable while staying upstream-faithful.
@@ -170,14 +172,14 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
 
-  # 4. Bake /etc/skel (illogical-impulse dots + Base Dotfiles), SDDM conf,
+  # 3. Bake /etc/skel (illogical-impulse dots + Base Dotfiles), SDDM conf,
   #    systemd units, dconf db, udev rules, ujust recipe
   - type: files
     files:
       - source: system
         destination: /
 
-  # 5. Build-time scripts (live in files/scripts/; reference by bare filename)
+  # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
       - install-hyprbind.sh
@@ -189,7 +191,7 @@ modules:
       - install-hazkey.sh
       - finalize.sh
 
-  # 6. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the
+  # 5. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the
   #    user, mirroring upstream's symlink of the Fedora system unit into user scope)
   - type: systemd
     system:
@@ -202,7 +204,7 @@ modules:
         - hyprtomic-ii-venv.service
         - ydotool.service
 
-  # 7. Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
       - notify: true

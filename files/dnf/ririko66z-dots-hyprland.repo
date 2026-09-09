@@ -1,0 +1,10 @@
+[copr:copr.fedorainfracloud.org:ririko66z:dots-hyprland]
+name=Copr repo for dots-hyprland owned by ririko66z
+baseurl=https://download.copr.fedorainfracloud.org/results/ririko66z/dots-hyprland/fedora-$releasever-$basearch/
+type=rpm-md
+skip_if_unavailable=True
+gpgcheck=1
+gpgkey=https://download.copr.fedorainfracloud.org/results/ririko66z/dots-hyprland/pubkey.gpg
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1

@@ -1,15 +1,15 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: fedora-hyprtomic
-description: Personal Fedora Atomic Hyprland image (wayblue base) with custom Hyprland UI
+description: Personal Fedora Atomic Hyprland image (wayblue base) with the end-4/dots-hyprland (illogical-impulse) quickshell UI and Base Dotfiles tools
 
 base-image: ghcr.io/wayblueorg/hyprland
 image-version: latest # wayblue's only supported tag; tracks current Fedora stable
 
 modules:
-  # NOTE: module order matters for layer caching. Slow-but-stable layers (dnf) go
-  # first; frequently-edited layers (files/scripts) go last so dotfile tweaks
-  # don't invalidate the package layer.
+  # NOTE: module order matters for layer caching. Slow-but-stable layers (dnf)
+  # go first; frequently-edited layers (files/scripts) go last so dotfile
+  # tweaks don't invalidate the package layer.
 
   # 1. Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
   - type: os-release
@@ -24,17 +24,107 @@ modules:
       BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
       DEFAULT_HOSTNAME: "hyprtomic"
 
-  # 2. System-layer packages (Fedora official repos only; no copr)
+  # 2. COPRs for the illogical-impulse GUI deps
+  #    (mirrors upstream sdata/dist-fedora/feddeps.toml; hyprland itself stays
+  #    on the wayblue base image, so sdegler/hyprland is intentionally NOT added)
+  - type: copr
+    source: ririko66z/dots-hyprland # quickshell-git, matugen, microtex, breeze-plus, ii font set
+  - type: copr
+    source: deltacopy/darkly        # Qt style (kdeglobals widgetStyle=Darkly)
+  - type: copr
+    source: alternateved/eza
+  - type: copr
+    source: atim/starship
+
+  # 3. System-layer packages
   - type: dnf
     install:
+      # Not every package above exists on every Fedora branch / COPR build;
+      # skip-unavailable keeps the image buildable while staying upstream-faithful.
+      skip-unavailable: true
       packages:
         # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
-        - quickshell
-        # SDDM astronaut theme deps
-        - qt6-qtsvg
-        - qt6-qtvirtualkeyboard
-        - qt6-qtmultimedia
-        - qt6-qt5compat
+        # (>= Hyprland 0.55 required for the Lua config)
+
+        # GUI shell (illogical-impulse): quickshell + Material You theming
+        - quickshell-git
+        - matugen
+        - microtex # LaTeX widget (installed as /opt/MicroTeX)
+        - darkly
+        # ii runtime: widgets / launchers / OSD
+        - fuzzel
+        - cava
+        - wlogout
+        - qalculate
+        - songrec
+        - translate-shell
+        - hyprpicker
+        - hyprshot
+        - wf-recorder
+        - swappy
+        - tesseract
+        - tesseract-langpack-eng
+        - tesseract-langpack-jpn
+        - imagemagick
+        - mpvpaper
+        - wtype
+        - ydotool
+        # ii runtime: system info / power / display
+        - upower
+        - geoclue2
+        - ddcutil
+        # ii runtime: shell scripting deps
+        - bc
+        - jq
+        - ripgrep
+        - wget
+        - yq
+        - rsync # required by ujust sync-skel-config
+        - unzip
+        - dconf # bakes the gsettings baseline (finalize.sh runs `dconf update`)
+        - uv # creates ~/.local/state/quickshell/.venv (first login service)
+        - python3-gobject
+        - python3-cairo
+        # Terminals / prompt (ii fish + fallbacks; terminal default is ghostty)
+        - kitty
+        - fish
+        - eza
+        - starship
+        # Cursor / GTK / Qt theming (ii pipeline: matugen + adw-gtk3 + Kvantum + Darkly)
+        - bibata-cursor-theme
+        - adw-gtk3-theme
+        - breeze-icon-theme
+        - kf6-breeze-icons
+        - breeze-plus-icon-theme
+        - kvantum
+        - kdialog
+        - kf6-kirigami
+        - kf6-syntax-highlighting
+        - qt6-qtimageformats
+        - qt6-qtpositioning
+        - qt6-qtquicktimeline
+        - qt6-qtsensors
+        - qt6-qttools
+        - qt6-qttranslations
+        # Portals (ii uses the KDE portal UI for theming-aware dialogs)
+        - xdg-desktop-portal-gtk
+        - xdg-desktop-portal-kde
+        # Fonts (ii appearance: Google Sans Flex / Readex Pro / Rubik / Space
+        # Grotesk + JetBrains Mono NF for monospace/nerd glyphs)
+        - florian-karsten-space-grotesk-fonts
+        - jetbrains-mono-nerd-fonts
+        - google-material-symbols-vf-rounded-fonts
+        - material-icons-fonts
+        - readex-pro-fonts-all
+        - google-rubik-vf-fonts
+        - google-sans-flex-vf-fonts
+        - twitter-twemoji-fonts
+        - google-noto-color-emoji-fonts
+        - cascadia-mono-nf-fonts
+        # Fonts fallback (system)
+        - google-noto-sans-fonts
+        - google-noto-sans-cjk-fonts
+        - fontawesome-fonts
         # Audio
         - pipewire
         - pipewire-pulseaudio
@@ -42,25 +132,13 @@ modules:
         - pavucontrol
         # Network
         - NetworkManager
-        - network-manager-applet
-        # Bluetooth (blueman removed; managed via quickshell BluetoothSection)
+        # Bluetooth (managed via the quickshell BluetoothSection)
         - bluez
-        # Auth base (polkit + hyprpolkitagent provided by wayblue base)
+        # Auth base (polkit handled by quickshell's built-in agent)
         - gnome-keyring
-        # Qt / theme
-        - qt5ct
-        - qt6ct
-        - kvantum
+        # Qt wayland backends
         - qt5-qtwayland
         - papirus-icon-theme
-        # Fonts
-        - google-noto-sans-fonts
-        - google-noto-sans-cjk-fonts
-        - fontawesome-fonts
-        # Bar / notify / launcher
-        - waybar
-        - dunst
-        - swaybg
         # Screenshot / clipboard
         - grim
         - slurp
@@ -71,9 +149,8 @@ modules:
         - playerctl
         - libnotify
         - dex-autostart
-        - python3-gobject
         - fastfetch
-        # File manager (Fedora official; promoted from user-later to system standard)
+        # File manager (nemo is the Base Dotfiles fileManager override)
         - nemo
         - nemo-extensions
         - file-roller
@@ -84,10 +161,6 @@ modules:
         - fcitx5-gtk
         - fcitx5-qt
         - fcitx5-configtool
-        # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
-        - wtype
-        - python3-cairo
-        - google-noto-color-emoji-fonts
         # Common dev tools (used across all dev envs)
         - git
         - git-credential-oauth
@@ -97,33 +170,39 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
 
-  # 3. Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
+  # 4. Bake /etc/skel (illogical-impulse dots + Base Dotfiles), SDDM conf,
+  #    systemd units, dconf db, udev rules, ujust recipe
   - type: files
     files:
       - source: system
         destination: /
 
-  # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
+  # 5. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
       - install-hyprbind.sh
       - install-ghostty.sh
-      - install-nwg-dock.sh
       - install-sddm-theme.sh
-      - install-catppuccin-theme.sh
       - install-clipryx.sh
       - install-hypr-emoji-picker.sh
       - install-snipland.sh
       - install-hazkey.sh
       - finalize.sh
 
-  # 5. Enable firstboot services (unique hostname per machine)
+  # 6. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the
+  #    user, mirroring upstream's symlink of the Fedora system unit into user scope)
   - type: systemd
     system:
       enabled:
         - hyprtomic-hostname.service
+        - hyprtomic-zsh-default.service
+        - hyprtomic-groups.service
+    user:
+      enabled:
+        - hyprtomic-ii-venv.service
+        - ydotool.service
 
-  # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  # 7. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
       - notify: true

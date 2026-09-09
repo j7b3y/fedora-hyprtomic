@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Create the quickshell python venv used by the illogical-impulse shell
+# (ILLOGICAL_IMPULSE_VIRTUAL_ENV). Safe to re-run: exits when the venv exists.
+set -euo pipefail
+
+VENV="$HOME/.local/state/quickshell/.venv"
+REQS=/usr/share/hyprtomic/uv-requirements.txt
+
+[ -e "$VENV/bin/activate" ] && exit 0
+command -v uv >/dev/null 2>&1 || { echo "uv not found, skipping venv setup" >&2; exit 0; }
+
+mkdir -p "$(dirname "$VENV")"
+UV_NO_MODIFY_PATH=1 uv venv --prompt .venv "$VENV" -p 3.12
+# shellcheck disable=SC1091
+source "$VENV/bin/activate"
+uv pip install -r "$REQS"

@@ -1,0 +1,2 @@
+# uinput access for input-group users (ii on-screen keyboard / ydotool)
+SUBSYSTEM=="misc", KERNEL=="uinput", MODE="0660", GROUP="input"

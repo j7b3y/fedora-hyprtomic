@@ -1,0 +1,12 @@
+[Unit]
+Description=HyprTomic: create the quickshell python venv (first login only)
+ConditionPathExists=!%h/.local/state/quickshell/.venv/bin/activate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/hyprtomic-setup-ii-venv
+
+[Install]
+WantedBy=default.target

@@ -66,14 +66,15 @@ modules:
         - songrec
         - translate-shell
         - hyprpicker
-        - hyprshot
         - wf-recorder
         - swappy
         - tesseract
         - tesseract-langpack-eng
         - tesseract-langpack-jpn
-        - imagemagick
-        - mpvpaper
+        - ImageMagick # exact capitalization; "imagemagick" is a no-match
+        # mpvpaper / hyprshot: not packaged in Fedora official or the enabled
+        # COPRs. switchwall.sh degrades gracefully without mpvpaper (only
+        # video wallpapers affected; static wallpapers go through matugen).
         - wtype
         - ydotool
         # ii runtime: system info / power / display

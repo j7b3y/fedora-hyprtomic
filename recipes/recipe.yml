@@ -48,14 +48,12 @@ modules:
         # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
         # (>= Hyprland 0.55 required for the Lua config)
 
-        # GUI shell (illogical-impulse): quickshell + Material You theming
-        # NOTE: quickshell uses Qt PRIVATE APIs (qt6-qtbase is tightly coupled),
-        # so it must come from the same source that built against the current
-        # base Qt (6.11). Fedora official ships the same 0.2.1^git generation
-        # rebuilt for the current Qt; the COPR's quickshell-git is still built
-        # against Qt 6.10 and hard-fails dep resolution (Qt_6.10_PRIVATE_API).
-        - quickshell
-        - matugen
+        # GUI shell (illogical-impulse): quickshell + matugen are installed by
+        # install-ii-quickshell.sh from end-4's pinned Fedora 44 RPMs, which are
+        # built against the base Qt 6.11 private API. Fedora official's
+        # quickshell is far older than the pinned dots (shell fails to load,
+        # no bar), and the COPR's quickshell-git is built against Qt 6.10 and
+        # cannot be installed here.
         - microtex # LaTeX widget (installed as /opt/MicroTeX)
         - darkly
         # ii runtime: widgets / launchers / OSD
@@ -196,6 +194,7 @@ modules:
       - install-hypr-emoji-picker.sh
       - install-snipland.sh
       - install-hazkey.sh
+      - install-ii-quickshell.sh
       - finalize.sh
 
   # 5. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the

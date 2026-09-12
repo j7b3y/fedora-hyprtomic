@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "linux-mcp-server": {
+      "type": "local",
+      "command": ["/home/underdone/.local/bin/linux-mcp-server"],
+      "enabled": true,
+      "env": {
+        "LINUX_MCP_USER": "underdone"
+      }
+    }
+  }
+}

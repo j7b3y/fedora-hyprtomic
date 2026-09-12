@@ -70,18 +70,6 @@ Generate an offline installer from the published image (run on Fedora/WSL; build
 ```bash
 sudo bluebuild generate-iso --iso-name hyprtomic.iso -V server image ghcr.io/j7b3y/fedora-hyprtomic:latest
 ```
-
-- User creation happens **inside the installer** (anaconda shows the User Creation hub) only for profiles whose live media does not hand off to a post-install setup tool. The profile is picked from the *installer* environment's os-release `VARIANT_ID`, which is why the `-V` flag matters:
-  - `-V server` (**recommended**): user creation page is shown at install time.
-  - `-V kinoite` / other KDE-family profiles: Fedora 44 Kinoite ships **Plasma Setup**, so anaconda no longer shows the user screens and you end up at the SDDM login with no user.
-  - `-V silverblue` / any GNOME-family profile: anaconda removes the user screens and expects gnome-initial-setup, which this image does not ship — same dead end.
-  - Verify in the installer shell (Ctrl+Alt+F2): `/tmp/anaconda.log` should log the detected profile (e.g. `fedora-server`).
-- Do **not** use `--web-ui`: anaconda-webui is experimental in this builder and crashes at startup leaving a gray/blank screen (RHBZ 2308279).
-- The hostname is auto-set once on first boot to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`), replacing wayblue's `DEFAULT_HOSTNAME`.
-- If the ISO itself boots to a gray screen: switch to a text console with `Ctrl+Alt+F2` to inspect logs, or add `nomodeset` to the kernel line in GRUB (press `e` at the boot menu) to rule out graphics issues.
-
-These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
-
 ## Verification
 
 These images are signed with [Sigstore](https://www.sigstore.com/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:

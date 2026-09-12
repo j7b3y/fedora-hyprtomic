@@ -40,15 +40,6 @@ modules:
         - deltacopy-darkly.repo        # Qt style (kdeglobals widgetStyle=Darkly)
         - alternateved-eza.repo
         - atim-starship.repo
-    remove:
-      # anaconda takes its bootupd install path on UEFI whenever the ostree
-      # contains bootupd; that path's `ostree admin instutil set-kargs` ->
-      # `grub2-mkconfig` fails with "Child process exited with code 1" on some
-      # installs (UEFI + btrfs; Fedora Atomic issue #530 / RHBZ 1753485) and
-      # aborts the install. Nothing requires bootupd, and removing it makes
-      # anaconda use the conventional bootloader install path instead.
-      packages:
-        - bootupd
     install:
       # Not every package above exists on every Fedora branch / COPR build;
       # skip-unavailable keeps the image buildable while staying upstream-faithful.

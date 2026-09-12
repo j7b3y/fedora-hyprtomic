@@ -11,8 +11,8 @@
   "display": {
     "separator": "  ",
     "color": {
-      "keys": "#8AB4F8",
-      "title": "#8AB4F8"
+      "keys": "{{colors.primary.default.hex}}",
+      "title": "{{colors.tertiary.default.hex}}"
     }
   }
 }

@@ -93,11 +93,12 @@ modules:
         - uv # creates ~/.local/state/quickshell/.venv (first login service)
         - python3-gobject
         - python3-cairo
-        # Terminals / prompt (ii fish + fallbacks; terminal default is ghostty)
-        - kitty
+        # Terminals / prompt (ghostty is the only terminal; kitty intentionally
+        # not installed, ii fallbacks are overridden to ghostty in custom/variables.lua)
         - fish
         - eza
         - starship
+        - btop # task manager target for the ii shortcuts
         # Cursor / GTK / Qt theming (ii pipeline: matugen + adw-gtk3 + Kvantum + Darkly)
         - bibata-cursor-theme
         - adw-gtk3-theme

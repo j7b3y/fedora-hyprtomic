@@ -1,0 +1,22 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+name: hyprtomic-gui
+description: Arch-based HyprTomic GUI container (end-4 illogical-impulse) run via distrobox
+
+# Plain (non-bootable) Arch container consumed by distrobox on the HyprTomic
+# host. BlueBuild's non-Fedora support is experimental and targets bootc images;
+# this recipe intentionally uses only base-agnostic modules (script/files/
+# containerfile/os-release/signing).
+base-image: archlinux
+image-version: latest
+# Do not install the BlueBuild CLI into the image (it assumes a bootable Fedora
+# host and is not needed inside the GUI container).
+blue-build-tag: none
+
+modules:
+  # Smoke test: proves the BlueBuild pipeline can build on an Arch base.
+  - type: script
+    scripts:
+      - gui-00-smoke.sh
+
+  - type: signing

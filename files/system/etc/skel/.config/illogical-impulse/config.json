@@ -1,0 +1,26 @@
+{
+  "panelFamily": "ii",
+  "bar": {
+    "bottom": true
+  },
+  "apps": {
+    "terminal": "ghostty -e",
+    "changePassword": "ghostty -e fish -i -c 'passwd'",
+    "update": "ghostty -e fish -i -c 'ujust update'",
+    "taskManager": "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'gnome-system-monitor' 'command -v btop && ghostty -e btop'",
+    "volumeMixer": "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'pavucontrol'"
+  },
+  "dock": {
+    "pinnedApps": [
+      "com.mitchellh.ghostty",
+      "nemo"
+    ]
+  },
+  "launcher": {
+    "pinnedApps": [
+      "com.mitchellh.ghostty",
+      "nemo",
+      "org.mozilla.firefox"
+    ]
+  }
+}

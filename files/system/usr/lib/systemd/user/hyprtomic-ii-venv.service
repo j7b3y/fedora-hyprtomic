@@ -1,0 +1,15 @@
+[Unit]
+Description=HyprTomic: create the quickshell python venv (first login only)
+ConditionPathExists=!%h/.local/state/quickshell/.venv/bin/activate
+# The user manager has no network-online.target, so uv needs to fetch the
+# interpreter/wheels itself; retry until the network is actually usable.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/hyprtomic-setup-ii-venv
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

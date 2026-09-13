@@ -32,21 +32,22 @@ The `latest` tag will automatically point to the latest build. That build will s
 
 ## Post-install (first login)
 
-```bash
-ujust setup-dotfiles                  # link baked Hyprland/quickshell/waybar/... configs into ~/.config
-ujust choose-kernel kernel-cachyos    # switch to the CachyOS kernel, then reboot
-```
+Dotfiles are baked into `/etc/skel` (illogical-impulse quickshell UI + Base Dotfiles tools) and are applied automatically for new accounts. For an account that predates the image:
 
-Note: the Linux Lite kernel is not available for Fedora Atomic, so `kernel-cachyos` is used as the "latest/optimized kernel" substitute.
+```bash
+ujust sync-skel-config                # merge -- copies skel files that don't exist yet
+ujust overwrite=1 sync-skel-config    # reset managed files to the image defaults (back up ~/.config first)
+ujust login-wallpaper /path/to/img    # optional: swap the SDDM login wallpaper
+```
 
 GUI apps default to Flatpak (Flathub). The image auto-provisions the standard set:
 
 - **ghostty** (terminal, copr `scottames/ghostty`), **nemo** + extensions (dnf), **firefox / loupe / bitwarden** (system flatpak)
-- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snipland** (snipping) — source-built (best-effort, non-fatal)
-- **fcitx5 + mozc** (Japanese input) via native dnf, with IM env + autostart baked into `hyprland.conf`
+- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snipland** (snipping), **hyprbind** (keybind list) — source-built (best-effort, non-fatal)
+- **fcitx5 + hazkey** (Japanese input) via native dnf + copr, with IM env + autostart baked into `~/.config/hypr/custom/`
+- The quickshell python venv (`~/.local/state/quickshell/.venv`) is created on first login by `hyprtomic-ii-venv.service`
 
-Manual (not auto-installable):
-- **fcitx5-hazkey** engine: not on Flathub/Fedora. Build from the gist's flatpak manifest if you specifically want hazkey (mozc covers Japanese input meanwhile).
+GUI reference: [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) (pinned commit recorded in `/usr/share/hyprtomic/versions.env`), with the bar placed at the bottom via `~/.config/illogical-impulse/config.json` and the Base Dotfiles quadgrid layout registered (per-workspace opt-in, default layout untouched).
 
 ### btrfs compression tuning (optional, run once after install)
 
@@ -67,23 +68,21 @@ sudo btrfs fi defragment -r -c zstd /var /home
 Generate an offline installer from the published image (run on Fedora/WSL; builds the ostree payload into Fedora's anaconda media):
 
 ```bash
-sudo bluebuild generate-iso --iso-name hyprtomic.iso -V kinoite image ghcr.io/j7b3y/fedora-hyprtomic:latest
+sudo bluebuild generate-iso --iso-name hyprtomic.iso -V server image ghcr.io/j7b3y/fedora-hyprtomic:latest
 ```
-
-- User creation happens **inside the installer** (anaconda shows the User Creation hub) as long as the live media uses a non-GNOME profile. The profile is picked from the *installer* environment's os-release `VARIANT_ID`, which is why the `-V` flag matters:
-  - `-V kinoite` (recommended) or `-V server`: user creation page is shown at install time.
-  - `-V silverblue` / any GNOME-family profile: anaconda intentionally removes the user screens and expects gnome-initial-setup, which this image does not ship — you end up at the SDDM login with no user. This is what bit earlier ISO builds.
-  - Verify in the installer shell (Ctrl+Alt+F2): `/tmp/anaconda.log` should log the detected profile (e.g. `fedora-kinoite`).
-- Do **not** use `--web-ui`: anaconda-webui is experimental in this builder and crashes at startup leaving a gray/blank screen (RHBZ 2308279).
-- The hostname is auto-set once on first boot to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`), replacing wayblue's `DEFAULT_HOSTNAME`.
-- If the ISO itself boots to a gray screen: switch to a text console with `Ctrl+Alt+F2` to inspect logs, or add `nomodeset` to the kernel line in GRUB (press `e` at the boot menu) to rule out graphics issues.
-
-These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
-
 ## Verification
 
-These images are signed with [Sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
+These images are signed with [Sigstore](https://www.sigstore.com/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/j7b3y/fedora-hyprtomic
 ```
+
+## Credits / 引用元
+
+See [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) for the full attribution.
+
+- GUI: [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) (illogical-impulse, GPL-3.0) — vendored into `/etc/skel` at a pinned commit (`/usr/share/hyprtomic/versions.env`); license texts shipped at `/usr/share/licenses/hyprtomic/` and in [`licenses/`](./licenses/)
+- sync-skel-config design: [oameye/atomic-hyprland](https://github.com/oameye/atomic-hyprland)
+- Base Dotfiles layer (quadgrid, tools integration): this repo's [`fix/setup`](https://github.com/j7b3y/fedora-hyprtomic/tree/fix/setup) branch
+- Source-built tools: [clipryx](https://github.com/Yot360/clipryx), [HyprBind](https://github.com/ry2x/HyprBind), [snipland](https://github.com/AnrokX/snipland), [hypr-emoji-picker](https://github.com/oneroa/hypr-emoji-picker), [sddm-astronaut-theme](https://github.com/Keyitdev/sddm-astronaut-theme)

@@ -1,1 +1,6 @@
-files/system/usr/share/dotfiles/fastfetch/logo.txt text eol=lf
+# Keep text assets line-ending stable
+files/system/etc/skel/.config/fastfetch/logo.txt text eol=lf
+# Images must never be line-ending converted
+*.jpg binary
+*.png binary
+*.svg text

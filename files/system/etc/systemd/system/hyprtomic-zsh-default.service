@@ -1,0 +1,10 @@
+[Unit]
+Description=HyprTomic first boot: make zsh the default login shell
+ConditionPathExists=!/var/lib/hyprtomic/.zsh-default-set
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/hyprtomic/setup-zsh.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -39,8 +39,9 @@ jobs:
           use_cache: true
 
       # Tag the freshly published :latest with today's date for easy rollback.
+      # main-only: a workflow_dispatch from a dev/* branch must never retag :latest.
       - name: Tag image with date
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           sudo apt-get update && sudo apt-get install -y skopeo
           DATE=$(date +%Y.%m.%d)

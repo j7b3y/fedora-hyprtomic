@@ -1,0 +1,9 @@
+[Unit]
+Description=HyprTomic: ensure session groups (video/input) for human users
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/hyprtomic/setup-groups.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -14,9 +14,20 @@ image-version: latest
 blue-build-tag: none
 
 modules:
-  # Smoke test: proves the BlueBuild pipeline can build on an Arch base.
+  # 1. Official Arch packages (base tooling, ii widgets, Qt6 stack, fonts, IME).
   - type: script
     scripts:
-      - gui-00-smoke.sh
+      - gui-01-packages.sh
+
+  # 2. AUR packages (quickshell-git built against the container Qt, Base
+  #    Dotfiles tools, end-4 decoration fonts) + the hyprbind binary package.
+  - type: script
+    scripts:
+      - gui-02-aur.sh
+
+  # 3. Image tidy-up.
+  - type: script
+    scripts:
+      - gui-99-finalize.sh
 
   - type: signing

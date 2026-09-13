@@ -177,14 +177,22 @@ modules:
         - zsh-autosuggestions
         - zsh-syntax-highlighting
 
-  # 3. Bake /etc/skel (illogical-impulse dots + Base Dotfiles), SDDM conf,
+  # 3. quickshell: built against the base image's Qt (see the script). Kept as
+  #    its own script module so it is a separate layer: editing other scripts or
+  #    the dotfiles below does not invalidate this expensive build, and the
+  #    registry layer cache (use_cache) can reuse it.
+  - type: script
+    scripts:
+      - install-ii-quickshell.sh
+
+  # 4. Bake /etc/skel (illogical-impulse dots + Base Dotfiles), SDDM conf,
   #    systemd units, dconf db, udev rules, ujust recipe
   - type: files
     files:
       - source: system
         destination: /
 
-  # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
+  # 5. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
       - install-hyprbind.sh
@@ -194,10 +202,9 @@ modules:
       - install-hypr-emoji-picker.sh
       - install-snipland.sh
       - install-hazkey.sh
-      - install-ii-quickshell.sh
       - finalize.sh
 
-  # 5. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the
+  # 6. Enable services (firstboot: hostname/zsh; session: ydotool daemon as the
   #    user, mirroring upstream's symlink of the Fedora system unit into user scope)
   - type: systemd
     system:
@@ -210,7 +217,7 @@ modules:
         - hyprtomic-ii-venv.service
         - ydotool.service
 
-  # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  # 7. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
     configurations:
       - notify: true

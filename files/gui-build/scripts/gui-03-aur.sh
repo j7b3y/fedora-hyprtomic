@@ -5,10 +5,10 @@ set -euo pipefail
 #
 # NOTE: microtex-git (ii LaTeX widget) is omitted for now: its 2024 source
 # snapshot fails to compile against the current Arch toolchain. clipryx
-# (dotnet-sdk) and fcitx5-hazkey (swift) are deferred for build size; use
-# fcitx5-hazkey-bin when re-adding.
-
+# (dotnet-sdk) is deferred for build size. fcitx-mozke is not packaged; it would
+# need a source build (tracked as a follow-up).
 AUR_PKGS=(
+  fcitx5-hazkey-bin   # IME engine (prebuilt; avoids the swift-language build)
   wlogout
   hypremoji           # Base Dotfiles' hypr-emoji-picker replacement
   snipland

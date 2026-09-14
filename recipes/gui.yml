@@ -40,6 +40,14 @@ modules:
         COPY files/gui-build/scripts/gui-03-aur.sh /tmp/gui-03-aur.sh
         RUN bash /tmp/gui-03-aur.sh
 
+  # 3b. Google Sans Flex (end-4 default UI font), extracted from end-4's Fedora
+  #     RPM since it is not packaged for Arch/AUR.
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-04-fonts.sh /tmp/gui-04-fonts.sh
+        RUN bash /tmp/gui-04-fonts.sh
+
   # 4. Container-side assets: the illogical-impulse session entrypoint and the
   #    python requirements used to build the shell venv in $HOME.
   - type: files

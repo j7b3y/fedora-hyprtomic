@@ -32,7 +32,9 @@ PACMAN_PKGS=(
   # file manager (Base Dotfiles override: nemo)
   nemo nemo-fileroller nemo-image-converter nemo-python
   # IME
-  fcitx5 fcitx5-gtk fcitx5-qt fcitx5-configtool
+  # IME (managed here so container GUI apps get it): mozc is the baseline
+  # engine; hazkey (AUR) and fcitx-mozke can be layered on top.
+  fcitx5 fcitx5-gtk fcitx5-qt fcitx5-configtool fcitx5-mozc
   # screenshot / clipboard / hardware clients
   grim slurp wl-clipboard upower ddcutil bluez bluez-utils
   # compositor: present for libraries/IPC used by hypremoji/hyprbind/snipland

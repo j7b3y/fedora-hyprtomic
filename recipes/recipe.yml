@@ -50,29 +50,20 @@ modules:
         - pavucontrol
         # Network
         - NetworkManager
-        - network-manager-applet
-        # Bluetooth (blueman removed; managed via quickshell BluetoothSection)
+        # Bluetooth (managed via the quickshell BluetoothSection)
         - bluez
         # Auth base (polkit + hyprpolkitagent provided by wayblue base)
         - gnome-keyring
-        # Qt / theme
-        - qt5ct
-        - qt6ct
-        - kvantum
+        # Qt wayland backend
         - qt5-qtwayland
-        - papirus-icon-theme
-        # Fonts
-        - google-noto-sans-fonts
+        # Fonts (base set; end-4 decoration fonts + IME live in the GUI container)
         - google-noto-sans-cjk-fonts
         - google-noto-color-emoji-fonts
         - twitter-twemoji-fonts
-        - fontawesome-fonts
         # Cursor theme (loaded by the compositor, so it must be on the host)
         - bibata-cursor-theme
-        # Bar / notify / launcher
-        - waybar
-        - dunst
-        - swaybg
+        # Bar / notifications: provided by quickshell in the GUI container
+        # (waybar/dunst/swaybg removed -- end-4 uses its own shell).
         # Screenshot / clipboard
         - grim
         - slurp
@@ -92,11 +83,8 @@ modules:
         - file-roller
         - ffmpegthumbnailer
         - tumbler
-        # IME (native fcitx5; hazkey engine installed via copr; profile enables it)
-        - fcitx5
-        - fcitx5-gtk
-        - fcitx5-qt
-        - fcitx5-configtool
+        # IME: managed inside the GUI container (fcitx5 + engine there), so the
+        # input method is available to the container's GUI apps.
         # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
         - wtype
         - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)

@@ -1,0 +1,5 @@
+# Baseline GTK/GNOME defaults for the illogical-impulse shell
+# (mirrors upstream dots-hyprland 2.setups.sh gsettings; per-user gsettings still overrides)
+[org/gnome/desktop/interface]
+font-name='Google Sans Flex Medium 11 @opsz=11,wght=500'
+color-scheme='prefer-dark'

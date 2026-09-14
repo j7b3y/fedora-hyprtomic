@@ -118,11 +118,17 @@ modules:
       - install-hazkey.sh
       - finalize.sh
 
-  # 5. Enable firstboot services (unique hostname per machine)
+  # 5. Enable firstboot/session services (hostname, user groups, zsh default;
+  #    ydotool daemon as a user unit, mirroring upstream)
   - type: systemd
     system:
       enabled:
         - hyprtomic-hostname.service
+        - hyprtomic-groups.service
+        - hyprtomic-zsh-default.service
+    user:
+      enabled:
+        - ydotool.service
 
   # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks

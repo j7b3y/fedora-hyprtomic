@@ -34,7 +34,7 @@ init_container() {
     # Expose container-side GUI tools on the host PATH (shims that re-enter the
     # container) so Hyprland keybinds/scripts can call them transparently.
     distrobox enter "$CONTAINER" -- bash -lc '
-        for bin in snipland hypremoji hyprbind fuzzel wlogout swappy hyprpicker; do
+        for bin in ghostty snipland hypremoji hyprbind fuzzel wlogout swappy hyprpicker; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true

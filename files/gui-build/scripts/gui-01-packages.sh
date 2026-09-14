@@ -12,6 +12,9 @@ PACMAN_PKGS=(
   base-devel git go
   fish eza starship btop fastfetch jq go-yq ripgrep wget rsync unzip bc uv
   python-pip python-gobject python-cairo
+  # terminal (the only GUI terminal; exported to the host PATH by
+  # hyprtomic-gui-shell so the ii terminal keybind works)
+  ghostty
   # ii widgets / apps
   fuzzel cava libqalculate songrec translate-shell hyprpicker wf-recorder swappy
   tesseract tesseract-data-eng tesseract-data-jpn imagemagick

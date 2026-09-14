@@ -5,10 +5,10 @@ set -euo pipefail
 #
 # NOTE: microtex-git (ii LaTeX widget) is omitted for now: its 2024 source
 # snapshot fails to compile against the current Arch toolchain. clipryx
-# (dotnet-sdk) is deferred for build size. fcitx-mozke is not packaged; it would
-# need a source build (tracked as a follow-up).
+# (dotnet-sdk) is deferred for build size.
 AUR_PKGS=(
-  fcitx5-hazkey-bin   # IME engine (prebuilt; avoids the swift-language build)
+  mozkey-ibg-bin     # primary IME engine (Mozkey IbG, prebuilt for fcitx5)
+  fcitx5-hazkey-bin  # IME fallback engine (prebuilt; avoids the swift-language build)
   wlogout
   hypremoji           # Base Dotfiles' hypr-emoji-picker replacement
   snipland

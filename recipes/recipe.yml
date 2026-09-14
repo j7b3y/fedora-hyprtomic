@@ -28,8 +28,9 @@ modules:
   - type: dnf
     install:
       packages:
-        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
-        - quickshell
+        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
+        # The GUI shell (quickshell + ii helpers) is NOT installed here: it lives
+        # in the Arch GUI container (ghcr.io/j7b3y/hyprtomic-gui).
         # SDDM astronaut theme deps
         - qt6-qtsvg
         - qt6-qtvirtualkeyboard
@@ -56,7 +57,11 @@ modules:
         # Fonts
         - google-noto-sans-fonts
         - google-noto-sans-cjk-fonts
+        - google-noto-color-emoji-fonts
+        - twitter-twemoji-fonts
         - fontawesome-fonts
+        # Cursor theme (loaded by the compositor, so it must be on the host)
+        - bibata-cursor-theme
         # Bar / notify / launcher
         - waybar
         - dunst
@@ -107,14 +112,11 @@ modules:
   # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
-      - install-hyprbind.sh
       - install-ghostty.sh
       - install-nwg-dock.sh
       - install-sddm-theme.sh
       - install-catppuccin-theme.sh
       - install-clipryx.sh
-      - install-hypr-emoji-picker.sh
-      - install-snipland.sh
       - install-hazkey.sh
       - finalize.sh
 

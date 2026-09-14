@@ -24,9 +24,16 @@ modules:
       BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
       DEFAULT_HOSTNAME: "hyprtomic"
 
-  # 2. System-layer packages (Fedora official repos only; no copr)
+  # 2. System-layer packages (Fedora official + the end-4 COPR only for the
+  #    Bibata cursor theme, which the compositor loads and Fedora does not ship;
+  #    the GUI shell itself lives in the Arch container)
   - type: dnf
+    repos:
+      cleanup: true
+      files:
+        - ririko66z-dots-hyprland.repo # bibata-cursor-theme
     install:
+      skip-unavailable: true
       packages:
         # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
         # The GUI shell (quickshell + ii helpers) is NOT installed here: it lives

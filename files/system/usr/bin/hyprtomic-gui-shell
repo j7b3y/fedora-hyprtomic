@@ -4,10 +4,10 @@
 # The end-4 (illogical-impulse) shell and its GUI helpers live in an Arch
 # distrobox container (ghcr.io/j7b3y/hyprtomic-gui) so they are built against
 # the distro their dotfiles come from. The Hyprland session runs on the host;
-# quickshell (qs) is launched from here into the container.
+# the container session is started from here.
 #
 # Usage:
-#   hyprtomic-gui-shell              ensure the container, then run `qs -c ii`
+#   hyprtomic-gui-shell              ensure the container, then run the shell session
 #   hyprtomic-gui-shell init         create + initialize if missing
 #   hyprtomic-gui-shell update       recreate from the latest image
 #   hyprtomic-gui-shell reset        same as update, explicit
@@ -30,6 +30,19 @@ init_container() {
             cat /proc/sys/kernel/random/uuid | tr -d "-" > /etc/machine-id
         fi
     '
+
+    # The illogical-impulse python venv lives in the (shared) home and is
+    # created once on first setup.
+    distrobox enter "$CONTAINER" -- bash -lc '
+        venv="$HOME/.local/state/quickshell/.venv"
+        if [ ! -x "$venv/bin/python" ]; then
+            echo "Building the illogical-impulse python venv (one-time) ..." >&2
+            mkdir -p "$(dirname "$venv")"
+            uv venv --prompt .venv "$venv" -p 3.12
+            uv pip install --python "$venv/bin/python" \
+                -r /usr/share/hyprtomic/uv-requirements.txt
+        fi
+    '
 }
 
 ensure() {
@@ -47,6 +60,13 @@ cmd_update() {
     ensure
 }
 
+gui_env=(
+    "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
+    "XDG_CURRENT_DESKTOP=Hyprland"
+    "XDG_SESSION_TYPE=wayland"
+)
+
 case "${1:-}" in
     init) ensure ;;
     update | reset) cmd_update ;;
@@ -54,20 +74,12 @@ case "${1:-}" in
     "" )
         ensure || exit 1
         exec distrobox enter "$CONTAINER" -- \
-            env "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}" \
-                "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" \
-                "XDG_CURRENT_DESKTOP=Hyprland" \
-                "XDG_SESSION_TYPE=wayland" \
-                bash -lc 'exec qs -c ii'
+            env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session'
         ;;
     * )
-        # Pass any other arguments straight through to quickshell.
+        # Pass any other arguments straight through to quickshell in the container.
         ensure || exit 1
         exec distrobox enter "$CONTAINER" -- \
-            env "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}" \
-                "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" \
-                "XDG_CURRENT_DESKTOP=Hyprland" \
-                "XDG_SESSION_TYPE=wayland" \
-                bash -lc 'exec qs "$@"' bash "$@"
+            env "${gui_env[@]}" bash -lc 'exec qs "$@"' bash "$@"
         ;;
 esac

@@ -30,4 +30,11 @@ modules:
     scripts:
       - gui-99-finalize.sh
 
+  # 4. Container-side assets: the illogical-impulse session entrypoint and the
+  #    python requirements used to build the shell venv in $HOME.
+  - type: files
+    files:
+      - source: gui
+        destination: /
+
   - type: signing

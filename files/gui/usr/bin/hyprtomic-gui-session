@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Illogical-impulse session entrypoint, run inside the GUI container by the
+# host's hyprtomic-gui-shell. Starts the container-side helpers that need the
+# Wayland session and then quickshell.
+set -uo pipefail
+
+# Clipboard history (cliphist + wl-clipboard live in the container) and notify
+# the quickshell clipboard service.
+wl-paste --type text  --watch bash -c 'cliphist store && qs -c ii ipc call cliphistService update' &
+wl-paste --type image --watch bash -c 'cliphist store && qs -c ii ipc call cliphistService update' &
+
+exec qs -c ii

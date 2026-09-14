@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Host-side launcher/manager for the HyprTomic GUI container.
+#
+# The end-4 (illogical-impulse) shell and its GUI helpers live in an Arch
+# distrobox container (ghcr.io/j7b3y/hyprtomic-gui) so they are built against
+# the distro their dotfiles come from. The Hyprland session runs on the host;
+# quickshell (qs) is launched from here into the container.
+#
+# Usage:
+#   hyprtomic-gui-shell              ensure the container, then run `qs -c ii`
+#   hyprtomic-gui-shell init         create + initialize if missing
+#   hyprtomic-gui-shell update       recreate from the latest image
+#   hyprtomic-gui-shell reset        same as update, explicit
+#   hyprtomic-gui-shell status       show the container state
+set -uo pipefail
+
+CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
+IMAGE="${HYPRTOMIC_GUI_IMAGE:-ghcr.io/j7b3y/hyprtomic-gui:latest}"
+
+exists() {
+    distrobox list --no-color 2>/dev/null | grep -qw "$CONTAINER"
+}
+
+# BlueBuild's post_build wipes /var in the image (ostree assumption), so the
+# standard skeleton and a machine-id are (re)created once inside the container.
+init_container() {
+    distrobox enter "$CONTAINER" -- sudo bash -c '
+        mkdir -p /var/lib /var/cache /var/tmp /var/log /var/opt
+        if [ ! -s /etc/machine-id ]; then
+            cat /proc/sys/kernel/random/uuid | tr -d "-" > /etc/machine-id
+        fi
+    '
+}
+
+ensure() {
+    if ! exists; then
+        echo "Creating GUI container '$CONTAINER' from $IMAGE ..." >&2
+        distrobox create --name "$CONTAINER" --image "$IMAGE" -Y --no-entry || return 1
+        init_container || return 1
+    fi
+}
+
+cmd_update() {
+    if exists; then
+        distrobox rm -f "$CONTAINER" || return 1
+    fi
+    ensure
+}
+
+case "${1:-}" in
+    init) ensure ;;
+    update | reset) cmd_update ;;
+    status) distrobox list --no-color | grep -E "NAME|$CONTAINER" || true ;;
+    "" )
+        ensure || exit 1
+        exec distrobox enter "$CONTAINER" -- \
+            env "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+                "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" \
+                "XDG_CURRENT_DESKTOP=Hyprland" \
+                "XDG_SESSION_TYPE=wayland" \
+                bash -lc 'exec qs -c ii'
+        ;;
+    * )
+        # Pass any other arguments straight through to quickshell.
+        ensure || exit 1
+        exec distrobox enter "$CONTAINER" -- \
+            env "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+                "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}" \
+                "XDG_CURRENT_DESKTOP=Hyprland" \
+                "XDG_SESSION_TYPE=wayland" \
+                bash -lc 'exec qs "$@"' bash "$@"
+        ;;
+esac

@@ -71,6 +71,7 @@ modules:
         - playerctl
         - libnotify
         - dex-autostart
+        - distrobox # GUI container runtime (hyprtomic-gui-shell / ujust gui-container-*)
         - python3-gobject
         - fastfetch
         # File manager (Fedora official; promoted from user-later to system standard)

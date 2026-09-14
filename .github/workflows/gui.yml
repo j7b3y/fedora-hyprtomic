@@ -9,13 +9,13 @@ on:
     paths:
       - "recipes/gui.yml"
       - "files/gui/**"
-      - "files/scripts/gui-*"
+      - "files/gui-build/**"
       - ".github/workflows/gui.yml"
   pull_request:
     paths:
       - "recipes/gui.yml"
       - "files/gui/**"
-      - "files/scripts/gui-*"
+      - "files/gui-build/**"
       - ".github/workflows/gui.yml"
   workflow_dispatch:
 concurrency:

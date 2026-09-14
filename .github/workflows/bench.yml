@@ -1,5 +1,13 @@
 name: runner-bench
+# Manual benchmark harness: compares GitHub-hosted runner types.
+# (workflow_dispatch needs the file on the default branch, so a push trigger
+# scoped to this file is also provided while developing on a branch.)
 on:
+  push:
+    branches:
+      - "gui/**"
+    paths:
+      - ".github/workflows/bench.yml"
   workflow_dispatch:
 jobs:
   bench:

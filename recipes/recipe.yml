@@ -110,7 +110,6 @@ modules:
     scripts:
       - install-ghostty.sh
       - install-sddm-theme.sh
-      - install-clipryx.sh
       - install-hazkey.sh
       - finalize.sh
 

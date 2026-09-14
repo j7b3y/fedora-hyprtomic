@@ -3,7 +3,7 @@
 -- fullscreen -> Super+Shift+F, pin -> Super+Alt+P, bar -> Super+Alt+J,
 -- media -> Ctrl+Super+M, editor -> Ctrl+Super+C).
 -- end-4 keeps its mechanisms for clipboard (cliphist, Super+V) and screenshots
--- (region selector, Super+Shift+S); snipland stays as an extra on Super+Ctrl+Shift+S.
+-- (region selector, Super+Shift+S); Base's clipryx/snipland are omitted.
 
 -- Base Dotfiles core
 hl.bind("SUPER + Q", hl.dsp.exec_cmd(terminal), { description = "App: Terminal (Base)" })
@@ -20,8 +20,6 @@ hl.bind("SUPER + Delete", hl.dsp.global("quickshell:sessionToggle"), { descripti
 hl.bind("Henkan_Mode", hl.dsp.global("quickshell:searchToggleRelease"), { description = "Shell: Toggle search (変換キー)" })
 
 -- Base tools on keys ii does not use
-hl.bind("SUPER + CTRL + SHIFT + S", hl.dsp.exec_cmd("snipland"), { description = "Utilities: Screenshot (snipland)" })
-hl.bind("SUPER + SHIFT + V", hl.dsp.exec_cmd("clipryx"), { description = "Utilities: Clipboard history (clipryx)" })
 hl.bind("SUPER + SHIFT + K", hl.dsp.exec_cmd("hyprbind"), { description = "Utilities: Keybind list (hyprbind)" })
 hl.bind("SUPER + SHIFT + Period", hl.dsp.exec_cmd("hypremoji"), { description = "Utilities: Emoji picker (hypremoji)" })
 

@@ -10,7 +10,6 @@ AUR_PKGS=(
   mozkey-ibg-bin     # Japanese IME engine (Mozkey IbG, prebuilt for fcitx5)
   wlogout
   hypremoji           # Base Dotfiles' hypr-emoji-picker replacement
-  snipland
   darkly-bin
   breeze-plus
   adw-gtk-theme-git

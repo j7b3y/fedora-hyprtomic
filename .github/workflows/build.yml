@@ -5,10 +5,22 @@ on:
         "0 6 * * 1" # weekly (Mon 06:00 UTC) — cheaper pace; still auto-pulls latest base updates
   push:
     branches:
-      - main # only main publishes; dev/* pushes are validated via PR instead
-    paths-ignore: # don't rebuild if only documentation has changed
-      - "**.md"
+      - main # only main publishes; feature branches are validated via PR
+    paths:
+      - "recipes/recipe.yml"
+      - "files/system/**"
+      - "files/scripts/**"
+      - "!files/scripts/gui-*" # GUI-only scripts build in gui.yml
+      - "!**/*.md"
+      - ".github/workflows/build.yml"
   pull_request:
+    paths:
+      - "recipes/recipe.yml"
+      - "files/system/**"
+      - "files/scripts/**"
+      - "!files/scripts/gui-*"
+      - "!**/*.md"
+      - ".github/workflows/build.yml"
   workflow_dispatch: # allow manually triggering builds
 concurrency:
   # only run one build at a time

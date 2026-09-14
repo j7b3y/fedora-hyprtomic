@@ -1,14 +1,21 @@
 name: bluebuild-gui
 on:
+  # Only the integration branch publishes. Feature branches are validated by
+  # opening a PR, or on demand via workflow_dispatch (avoids rebuilding the
+  # expensive GUI image on every development push).
   push:
     branches:
-      - "gui/**"
-    paths-ignore:
-      - "**.md"
+      - main
+    paths:
+      - "recipes/gui.yml"
+      - "files/gui/**"
+      - "files/scripts/gui-*"
+      - ".github/workflows/gui.yml"
   pull_request:
     paths:
       - "recipes/gui.yml"
-      - "files/scripts/gui-*.sh"
+      - "files/gui/**"
+      - "files/scripts/gui-*"
       - ".github/workflows/gui.yml"
   workflow_dispatch:
 concurrency:

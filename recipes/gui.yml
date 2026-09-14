@@ -19,16 +19,16 @@ modules:
     scripts:
       - gui-01-packages.sh
 
-  # 2. AUR packages (quickshell-git built against the container Qt, Base
-  #    Dotfiles tools, end-4 decoration fonts) + the hyprbind binary package.
+  # 2. quickshell-git alone (the expensive compile) so it is cached
+  #    independently of the other AUR packages/fonts below.
   - type: script
     scripts:
-      - gui-02-aur.sh
+      - gui-02-quickshell.sh
 
-  # 3. Image tidy-up.
+  # 3. Remaining AUR packages (Base Dotfiles tools, themes, fonts) + hyprbind.
   - type: script
     scripts:
-      - gui-99-finalize.sh
+      - gui-03-aur.sh
 
   # 4. Container-side assets: the illogical-impulse session entrypoint and the
   #    python requirements used to build the shell venv in $HOME.
@@ -36,5 +36,10 @@ modules:
     files:
       - source: gui
         destination: /
+
+  # 5. Image tidy-up.
+  - type: script
+    scripts:
+      - gui-99-finalize.sh
 
   - type: signing

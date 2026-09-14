@@ -75,6 +75,9 @@ gui_env=(
     "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
     "XDG_CURRENT_DESKTOP=Hyprland"
     "XDG_SESSION_TYPE=wayland"
+    # Force the Wayland QPA plugin: without a display Qt falls back to xcb and
+    # dies with "no Qt platform plugin could be initialized".
+    "QT_QPA_PLATFORM=wayland"
 )
 
 case "${1:-}" in

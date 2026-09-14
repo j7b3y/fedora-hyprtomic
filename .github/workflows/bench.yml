@@ -1,0 +1,49 @@
+name: runner-bench
+on:
+  workflow_dispatch:
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: gh-linux-x64
+          - os: ubuntu-24.04-arm
+            name: gh-linux-arm64
+          - os: macos-14
+            name: gh-macos-m1
+          - os: macos-13
+            name: gh-macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: CPU info
+        run: |
+          uname -a || true
+          if [ "$(uname)" = "Darwin" ]; then
+            echo "ncpu: $(sysctl -n hw.ncpu)"
+            sysctl -n machdep.cpu.brand_string 2>/dev/null || sysctl -n hw.model
+          else
+            echo "nproc: $(nproc)"
+            lscpu | grep -E 'Model name|Thread\(s\) per core|Core\(s\) per socket|Socket' || true
+          fi
+      - name: CPU benchmark (single-thread + N-way parallel wall time)
+        run: |
+          cat > /tmp/bench.py <<'PY'
+          import hashlib, sys, time
+          iters = int(sys.argv[1])
+          d = b"x" * 4096
+          h = hashlib.sha256
+          t = time.perf_counter()
+          for _ in range(iters):
+              d = (h(d).digest() * 128)[:4096]
+          print(f"{time.perf_counter() - t:.3f}")
+          PY
+          N=$( (nproc 2>/dev/null || sysctl -n hw.ncpu) )
+          echo "cores: $N"
+          echo "single-thread: $(python3 /tmp/bench.py 300000) s"
+          t0=$(python3 -c 'import time;print(time.time())')
+          for i in $(seq 1 "$N"); do python3 /tmp/bench.py 300000 >/dev/null & done
+          wait
+          t1=$(python3 -c 'import time;print(time.time())')
+          python3 -c "print(f'parallel x$N wall: {$t1 - $t0:.3f} s')"

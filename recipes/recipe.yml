@@ -113,9 +113,7 @@ modules:
   - type: script
     scripts:
       - install-ghostty.sh
-      - install-nwg-dock.sh
       - install-sddm-theme.sh
-      - install-catppuccin-theme.sh
       - install-clipryx.sh
       - install-hazkey.sh
       - finalize.sh

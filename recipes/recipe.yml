@@ -99,6 +99,7 @@ modules:
         - fcitx5-configtool
         # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
         - wtype
+        - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)
         - python3-cairo
         - google-noto-color-emoji-fonts
         # Common dev tools (used across all dev envs)

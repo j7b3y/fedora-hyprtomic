@@ -10,3 +10,5 @@ wl-paste --type text  --watch bash -c 'cliphist store && qs -c ii ipc call cliph
 wl-paste --type image --watch bash -c 'cliphist store && qs -c ii ipc call cliphistService update' &
 
 exec qs -c ii
+
+# (cache test marker)

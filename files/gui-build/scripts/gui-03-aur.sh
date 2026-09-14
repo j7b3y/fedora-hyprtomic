@@ -7,8 +7,7 @@ set -euo pipefail
 # snapshot fails to compile against the current Arch toolchain. clipryx
 # (dotnet-sdk) is deferred for build size.
 AUR_PKGS=(
-  mozkey-ibg-bin     # primary IME engine (Mozkey IbG, prebuilt for fcitx5)
-  fcitx5-hazkey-bin  # IME fallback engine (prebuilt; avoids the swift-language build)
+  mozkey-ibg-bin     # Japanese IME engine (Mozkey IbG, prebuilt for fcitx5)
   wlogout
   hypremoji           # Base Dotfiles' hypr-emoji-picker replacement
   snipland

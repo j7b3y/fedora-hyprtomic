@@ -1,26 +1,20 @@
 [Groups/0]
 # Group Name
 Name=Default
-# Layout
-Default Layout=us
+# Layout (JIS)
+Default Layout=jp
 # Default Input Method
-DefaultIM=keyboard-us
+DefaultIM=keyboard-jp
 
 [Groups/0/Items/0]
 # Name
-Name=keyboard-us
+Name=keyboard-jp
 # Layout
 Layout=
 
 [Groups/0/Items/1]
 # Name
 Name=mozkey-ibg
-# Layout
-Layout=
-
-[Groups/0/Items/2]
-# Name
-Name=hazkey
 # Layout
 Layout=
 

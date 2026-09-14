@@ -10,6 +10,7 @@ on:
       - "recipes/recipe.yml"
       - "files/system/**"
       - "files/scripts/**"
+      - "files/dnf/**"
       - "!files/scripts/gui-*" # GUI-only scripts build in gui.yml
       - "!**/*.md"
       - ".github/workflows/build.yml"
@@ -18,6 +19,7 @@ on:
       - "recipes/recipe.yml"
       - "files/system/**"
       - "files/scripts/**"
+      - "files/dnf/**"
       - "!files/scripts/gui-*"
       - "!**/*.md"
       - ".github/workflows/build.yml"

@@ -18,6 +18,14 @@ hl.config({
             disable_while_typing = true,
         },
     },
+
+    -- ii ships render_power = 10, but Hyprland only accepts 1-4
+    -- ("decoration:shadow:render_power" errors out and falls back to default).
+    decoration = {
+        shadow = {
+            render_power = 4,
+        },
+    },
 })
 
 -- quadgrid: large-screen 2x2-cell custom layout (Base Dotfiles).

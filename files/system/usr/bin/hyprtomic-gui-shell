@@ -83,8 +83,14 @@ case "${1:-}" in
     status) distrobox list --no-color | grep -E "NAME|$CONTAINER" || true ;;
     "" )
         ensure || exit 1
+        # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
+        # loses it, and QML errors are the usual reason the bar does not appear.
+        log="$HOME/.local/state/hyprtomic/gui-session.log"
+        mkdir -p "$(dirname "$log")"
+        echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
         exec distrobox enter "$CONTAINER" -- \
-            env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session'
+            env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \
+            >>"$log" 2>&1
         ;;
     * )
         # Pass any other arguments straight through to quickshell in the container.

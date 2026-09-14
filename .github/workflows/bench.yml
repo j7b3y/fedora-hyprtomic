@@ -21,8 +21,6 @@ jobs:
             name: gh-linux-arm64
           - os: macos-14
             name: gh-macos-m1
-          - os: macos-13
-            name: gh-macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - name: CPU info

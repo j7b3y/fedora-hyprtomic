@@ -73,5 +73,17 @@ ShellRoot {
 
         onPressed: root.cyclePanelFamily()
     }
+
+    // HyprTomic policy: the anime/booru sidebar is omitted (the app drawer
+    // replaces it), so keep the policy pinned off even if an existing config
+    // still has it enabled.
+    Connections {
+        target: Config
+
+        function onReadyChanged() {
+            if (Config.ready && Config.options.policies.weeb !== 0)
+                Config.options.policies.weeb = 0;
+        }
+    }
 }
 

@@ -346,34 +346,6 @@ ApplicationWindow {
                         Layout.fillWidth: true
 
                         ContentSubsection {
-                            title: "Weeb"
-
-                            ConfigSelectionArray {
-                                currentValue: Config.options.policies.weeb
-                                onSelected: newValue => {
-                                    Config.options.policies.weeb = newValue;
-                                }
-                                options: [
-                                    {
-                                        displayName: Translation.tr("No"),
-                                        icon: "close",
-                                        value: 0
-                                    },
-                                    {
-                                        displayName: Translation.tr("Yes"),
-                                        icon: "check",
-                                        value: 1
-                                    },
-                                    {
-                                        displayName: Translation.tr("Closet"),
-                                        icon: "ev_shadow",
-                                        value: 2
-                                    }
-                                ]
-                            }
-                        }
-
-                        ContentSubsection {
                             title: "AI"
 
                             ConfigSelectionArray {

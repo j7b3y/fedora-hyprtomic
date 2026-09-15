@@ -94,14 +94,6 @@ Item { // Bar content region
                 Layout.leftMargin: 5
                 colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
             }
-
-            ActiveWindow {
-                Layout.leftMargin: 10
-                Layout.rightMargin: Appearance.rounding.screenRounding
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: root.useShortenedForm === 0
-            }
         }
     }
 
@@ -113,26 +105,6 @@ Item { // Bar content region
             horizontalCenter: parent.horizontalCenter
         }
         spacing: 4
-
-        BarGroup {
-            id: leftCenterGroup
-            anchors.verticalCenter: parent.verticalCenter
-            implicitWidth: root.centerSideModuleWidth
-
-            Resources {
-                alwaysShowAllResources: root.useShortenedForm === 2
-                Layout.fillWidth: root.useShortenedForm === 2
-            }
-
-            Media {
-                visible: root.useShortenedForm < 2
-                Layout.fillWidth: true
-            }
-        }
-
-        VerticalBarSeparator {
-            visible: Config.options?.bar.borderless
-        }
 
         BarGroup {
             id: middleCenterGroup
@@ -174,12 +146,6 @@ Item { // Bar content region
                 id: rightCenterGroupContent
                 anchors.fill: parent
 
-                ClockWidget {
-                    showDate: (Config.options.bar.verbose && root.useShortenedForm < 2)
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.fillWidth: true
-                }
-
                 UtilButtons {
                     visible: (Config.options.bar.verbose && root.useShortenedForm === 0)
                     Layout.alignment: Qt.AlignVCenter
@@ -220,7 +186,8 @@ Item { // Bar content region
             icon: "volume_up"
             tooltipText: Translation.tr("Scroll to change volume")
             side: "right"
-            anchors.right: parent.right
+            anchors.right: clockWidget.left
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -230,11 +197,18 @@ Item { // Bar content region
             spacing: 5
             layoutDirection: Qt.RightToLeft
 
+            ClockWidget { // Clock at the far right
+                id: clockWidget
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: Appearance.rounding.screenRounding
+                Layout.fillHeight: true
+            }
+
             RippleButton { // Right sidebar button
                 id: rightSidebarButton
 
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                Layout.rightMargin: Appearance.rounding.screenRounding
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: 10
                 Layout.fillWidth: false
 
                 implicitWidth: indicatorsRowLayout.implicitWidth + 10 * 2

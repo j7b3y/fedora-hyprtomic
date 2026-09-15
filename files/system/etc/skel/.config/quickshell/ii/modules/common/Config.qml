@@ -82,7 +82,7 @@ Singleton {
 
             property JsonObject policies: JsonObject {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local
-                property int weeb: 1 // 0: No | 1: Open | 2: Closet
+                property int weeb: 0 // 0: No | 1: Open | 2: Closet (HyprTomic: anime sidebar removed, pinned off)
             }
 
             property JsonObject ai: JsonObject {
@@ -564,6 +564,7 @@ Singleton {
             property JsonObject time: JsonObject {
                 // https://doc.qt.io/qt-6/qtime.html#toString
                 property string format: "hh:mm"
+                property string dateTimeFormat: "yyyy/MM/dd hh:mm"
                 property string shortDateFormat: "dd/MM"
                 property string dateWithYearFormat: "dd/MM/yyyy"
                 property string dateFormat: "ddd, dd/MM"

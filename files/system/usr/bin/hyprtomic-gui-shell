@@ -80,6 +80,13 @@ gui_env=(
     "QT_QPA_PLATFORM=wayland"
 )
 
+# VM (virtio-gpu): Qt's EGL path fails ("egl failed to create dri2 screen"),
+# which makes Qt Quick apps (quickshell, ghostty) die. Force software rendering
+# there; real GPUs keep hardware acceleration.
+if grep -qi virtio /sys/class/drm/*/device/uevent 2>/dev/null; then
+    gui_env+=("QT_QUICK_BACKEND=software" "LIBGL_ALWAYS_SOFTWARE=1")
+fi
+
 case "${1:-}" in
     init) ensure ;;
     update | reset) cmd_update ;;

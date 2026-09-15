@@ -1,5 +1,5 @@
+import qs.modules.common
 import QtQuick
-import "../.." as Root
 
 // ChromeOS-style app icon: white circle background + icon + label
 // Hover state: white semi-transparent rounded rect behind the whole cell
@@ -33,9 +33,9 @@ Item {
     // ── White circle icon background ─────────────────────────────
     Rectangle {
         id: circleBackground
-        width: 56
-        height: 56
-        radius: 28
+        width: 48
+        height: 48
+        radius: 24
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 14
@@ -71,7 +71,7 @@ Item {
             anchors.centerIn: parent
             text: appIcon.appName.length > 0 ? appIcon.appName.charAt(0).toUpperCase() : "?"
             font.pixelSize: 20
-            font.family: Root.Theme.fontFamily
+            font.family: Appearance.font.family.main
             font.weight: Font.Medium
             color: "#555555"
             visible: iconImage.status !== Image.Ready
@@ -86,8 +86,8 @@ Item {
         width: parent.width - 6
         text: appIcon.appName
         font.pixelSize: 12
-        font.family: Root.Theme.fontFamily
-        color: Root.Theme.textPrimary
+        font.family: Appearance.font.family.main
+        color: Appearance.colors.colOnLayer0
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         maximumLineCount: 1

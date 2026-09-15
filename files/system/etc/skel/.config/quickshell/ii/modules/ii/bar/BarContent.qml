@@ -82,15 +82,21 @@ Item { // Bar content region
             anchors.fill: parent
             spacing: 0
 
+            AppDrawerButton { // App drawer button (left end)
+                id: appDrawerButton
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: Appearance.rounding.screenRounding
+            }
+
             LeftSidebarButton { // Left sidebar button
                 id: leftSidebarButton
                 Layout.alignment: Qt.AlignVCenter
-                Layout.leftMargin: Appearance.rounding.screenRounding
+                Layout.leftMargin: 5
                 colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
             }
 
             ActiveWindow {
-                Layout.leftMargin: 10 + (leftSidebarButton.visible ? 0 : Appearance.rounding.screenRounding)
+                Layout.leftMargin: 10
                 Layout.rightMargin: Appearance.rounding.screenRounding
                 Layout.fillWidth: true
                 Layout.fillHeight: true

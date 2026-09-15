@@ -16,8 +16,8 @@ hl.bind("SUPER + M", hl.dsp.exec_cmd(taskManager), { description = "App: Task ma
 hl.bind("SUPER + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { description = "App: Bitwarden (Base)" })
 hl.bind("SUPER + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Shell: Session menu (Base)" })
 
--- 変換キー (Henkan_Mode) opens the shell search, like the Base launcher
-hl.bind("Henkan_Mode", hl.dsp.global("quickshell:searchToggleRelease"), { description = "Shell: Toggle search (変換キー)" })
+-- 変換キー (Henkan_Mode) opens the ChromeOS-style app drawer (Base launcher-like)
+hl.bind("Henkan_Mode", hl.dsp.global("quickshell:appDrawerToggle"), { description = "Shell: Toggle app drawer (変換キー)" })
 
 -- Base tools on keys ii does not use
 hl.bind("SUPER + SHIFT + K", hl.dsp.exec_cmd("hyprbind"), { description = "Utilities: Keybind list (hyprbind)" })

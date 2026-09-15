@@ -1,14 +1,16 @@
+import qs
+import qs.modules.common
+import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
-import "../.." as Root
 
 Scope {
     id: launcher
 
-    property bool panelVisible: false
     property bool _showing: false
     property bool _panelOpen: false
     property string searchText: ""
@@ -47,9 +49,9 @@ Scope {
     })
 
     // Assign each app to exactly one display category.
-    // Flatpak and Wine get dedicated categories; others follow plasma-desktop.
+    // Wine gets a dedicated category; Flatpak apps are listed under their
+    // normal XDG categories and launched through the host.
     function appCategory(entry) {
-        if (isFlatpak(entry)) return "Flatpak";
         if (isWine(entry)) return "Wine";
 
         var entryCats = entry.categories || [];
@@ -71,7 +73,7 @@ Scope {
     // Dynamic category list — empty categories are hidden.
     readonly property var visibleCategories: {
         var result = ["All Applications"];
-        var allCats = ["Flatpak", "Wine"].concat(plasmaCategoryOrder).concat(["Lost & Found"]);
+        var allCats = ["Wine"].concat(plasmaCategoryOrder).concat(["Lost & Found"]);
         for (var i = 0; i < allCats.length; i++) {
             var cat = allCats[i];
             for (var j = 0; j < allApps.length; j++) {
@@ -97,7 +99,7 @@ Scope {
     // ── Keyboard navigation state ────────────────────────────────
     property int kbSection: 0   // 0 = recent row, 1 = app grid
     property int kbIndex: 0
-    property int gridColumns: 5
+    property int gridColumns: 8
     property bool gridFocused: false  // true = arrow keys navigate grid; false = search input
 
     // ── Icon path cache (icon name -> file path) ─────────────────
@@ -108,7 +110,7 @@ Scope {
     property var iconCache: ({})
 
     readonly property string iconScript:
-        Quickshell.env("HOME") + "/.config/quickshell/scripts/resolve-icons.py"
+        Directories.scriptPath + "/appDrawer/resolve-icons.py"
 
     // Unique icon names from the current app set. Used to feed the
     // resolver only the icons we actually need (skips a .desktop scan
@@ -323,39 +325,42 @@ Scope {
         });
     }
 
-    // Each launch gets its own Process so that starting a new app never
-    // sends SIGTERM to a previously-launched one. With `uwsm app -t scope`
-    // (the default), the sh -c → uwsm → systemd-run --scope chain execs
-    // into the app, so a reused Process would stay "running" as long as
-    // the app lives; setting running = false on the next launch would
-    // kill that app. A per-launch Process avoids this entirely.
+    // Flatpak launches need their own Process: `distrobox-host-exec` stays
+    // alive as long as the app it forwarded to runs, so a reused Process
+    // would stay "running" and the next launch would kill the previous app.
+    // A per-launch Process avoids this entirely.
     Component {
         id: launchProcFactory
         Process {}
     }
 
-    // Launch via `uwsm app` so the app spawns as a transient systemd unit
-    // in app-graphical.slice, detached from the compositor cgroup.
+    // Flatpak is host-managed: run it on the host through
+    // `distrobox-host-exec`, falling back to a container-local flatpak when
+    // the shell is not running inside distrobox. Native apps are executed
+    // directly through Quickshell.
     function launchApp(entry) {
         recordRecentApp(entry.name);
-        var id = entry.id || "";
-        var exec = entry.execString || "";
-        if (!id && !exec) {
-            panelVisible = false;
+        if (!entry || (!entry.id && !entry.execString)) {
+            GlobalStates.appDrawerOpen = false;
             return;
         }
-        // -s a: pin to app-graphical.slice so the new scope sits next to
-        // autostart apps (which we move into the same slice via the
-        // app-@autostart.service.d/slice.conf drop-in), avoiding slice
-        // boundary churn on launch.
-        var cmd = id
-            ? "uwsm app -s a -- '" + id.replace(/'/g, "'\\''") + ".desktop'"
-            : "uwsm app -s a -- sh -c '" + exec.replace(/'/g, "'\\''") + "'";
-        var proc = launchProcFactory.createObject(launcher, {
-            "command": ["sh", "-c", cmd]
-        });
-        proc.running = true;
-        panelVisible = false;
+        if (isFlatpak(entry)) {
+            var id = String(entry.id).replace(/'/g, "'\\''");
+            var cmd = "if command -v distrobox-host-exec >/dev/null 2>&1; then "
+                + "exec distrobox-host-exec flatpak run '" + id + "'; "
+                + "else exec flatpak run '" + id + "'; fi";
+            var proc = launchProcFactory.createObject(launcher, {
+                "command": ["sh", "-c", cmd]
+            });
+            proc.running = true;
+        } else if (entry.runInTerminal) {
+            Quickshell.execDetached(["bash", "-c",
+                Config.options.apps.terminal + " -e '"
+                + StringUtils.shellSingleQuoteEscape(entry.command.join(" ")) + "'"]);
+        } else {
+            entry.execute();
+        }
+        GlobalStates.appDrawerOpen = false;
     }
 
     // ── Keyboard navigation ───────────────────────────────────────
@@ -403,26 +408,43 @@ Scope {
         return null;
     }
 
-    onPanelVisibleChanged: {
-        if (panelVisible) {
-            _showing = true;
-            searchText = "";
-            gridFocused = false;
-            // Default selection: first recent app (or first grid app if no recent)
-            kbSection = recentApps.length > 0 ? 0 : 1;
-            kbIndex = 0;
-        } else {
-            _panelOpen = false;
+    Connections {
+        target: GlobalStates
+
+        function onAppDrawerOpenChanged() {
+            if (GlobalStates.appDrawerOpen) {
+                GlobalStates.overviewOpen = false;
+                launcher._showing = true;
+                launcher.searchText = "";
+                launcher.gridFocused = false;
+                // Default selection: first recent app (or first grid app if no recent)
+                launcher.kbSection = launcher.recentApps.length > 0 ? 0 : 1;
+                launcher.kbIndex = 0;
+            } else {
+                launcher._panelOpen = false;
+            }
+        }
+
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen)
+                GlobalStates.appDrawerOpen = false;
         }
     }
 
     // ── IPC handlers ─────────────────────────────────────────────
     IpcHandler {
-        target: "launcher"
+        target: "appDrawer"
 
-        function toggle(): void { launcher.panelVisible = !launcher.panelVisible }
-        function show(): void { launcher.panelVisible = true }
-        function hide(): void { launcher.panelVisible = false }
+        function toggle(): void { GlobalStates.appDrawerOpen = !GlobalStates.appDrawerOpen }
+        function show(): void { GlobalStates.appDrawerOpen = true }
+        function hide(): void { GlobalStates.appDrawerOpen = false }
+    }
+
+    GlobalShortcut {
+        name: "appDrawerToggle"
+        description: "Toggles the app drawer"
+
+        onPressed: GlobalStates.appDrawerOpen = !GlobalStates.appDrawerOpen
     }
 
     // ── Overlay window ───────────────────────────────────────────
@@ -443,7 +465,7 @@ Scope {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
 
-            WlrLayershell.namespace: "quickshell:launcher"
+            WlrLayershell.namespace: "quickshell:appDrawer"
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
@@ -453,18 +475,18 @@ Scope {
                 id: openDelayTimer
                 interval: 16
                 repeat: false
-                onTriggered: if (launcher.panelVisible) launcher._panelOpen = true
+                onTriggered: if (GlobalStates.appDrawerOpen) launcher._panelOpen = true
             }
 
             Shortcut {
                 sequence: "Escape"
-                onActivated: launcher.panelVisible = false
+                onActivated: GlobalStates.appDrawerOpen = false
             }
 
             // Click-outside to close
             MouseArea {
                 anchors.fill: parent
-                onClicked: launcher.panelVisible = false
+                onClicked: GlobalStates.appDrawerOpen = false
             }
 
             // ── Clip region (above shelf/waybar) ─────────────────
@@ -474,7 +496,7 @@ Scope {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: Root.Theme.shelfHeight
+                anchors.bottomMargin: Config.options.bar.bottom ? Appearance.sizes.baseBarHeight : 0
                 clip: true
 
                 // ── Launcher panel — bottom-left, ChromeOS style ─
@@ -482,7 +504,7 @@ Scope {
                     id: panel
 
                     property real cellW: 130
-                    property real panelW: launcher.gridColumns * cellW + 48
+                    property real panelW: launcher.gridColumns * cellW + 24
                     property real panelH: Math.min(panelClip.height * 0.78, 780)
 
                     width: panelW
@@ -490,7 +512,7 @@ Scope {
 
                     // Bottom-left positioning
                     anchors.left: parent.left
-                    anchors.leftMargin: 12
+                    anchors.leftMargin: 6
 
                     states: [
                         State {
@@ -553,12 +575,10 @@ Scope {
                         }
                     ]
 
-                    radius: 28
-                    color: Qt.rgba(Root.Theme.panelBg.r, Root.Theme.panelBg.g, Root.Theme.panelBg.b, 0.78)
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colLayer0
                     border.width: 1
-                    border.color: Qt.rgba(Root.Theme.panelBorder.r,
-                                           Root.Theme.panelBorder.g,
-                                           Root.Theme.panelBorder.b, 0.3)
+                    border.color: Appearance.colors.colLayer0Border
 
                     // Block click-through
                     MouseArea {
@@ -568,11 +588,11 @@ Scope {
                     // ── Content layout ───────────────────────────
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.topMargin: 20
-                        anchors.bottomMargin: 20
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 24
-                        spacing: 16
+                        anchors.topMargin: 12
+                        anchors.bottomMargin: 12
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
 
                         // ── Search bar (ChromeOS pill) ───────────
                         Rectangle {
@@ -580,7 +600,7 @@ Scope {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 48
                             radius: 24
-                            color: Root.Theme.surfaceContainer
+                            color: Appearance.colors.colSurfaceContainer
                             opacity: launcher.gridFocused ? 0.5 : 1.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
 
@@ -593,19 +613,19 @@ Scope {
                                 Text {
                                     text: "\uf002"
                                     font.pixelSize: 15
-                                    font.family: Root.Theme.fontFamily
-                                    color: Root.Theme.textSecondary
+                                    font.family: Appearance.font.family.main
+                                    color: Appearance.colors.colSubtext
                                 }
 
                                 TextInput {
                                     id: searchInput
                                     Layout.fillWidth: true
                                     font.pixelSize: 13
-                                    font.family: Root.Theme.fontFamily
-                                    color: Root.Theme.textPrimary
+                                    font.family: Appearance.font.family.main
+                                    color: Appearance.colors.colOnLayer0
                                     clip: true
                                     selectByMouse: true
-                                    selectionColor: Root.Theme.primary
+                                    selectionColor: Appearance.colors.colPrimary
 
                                     onTextChanged: {
                                         launcher.searchText = text;
@@ -634,7 +654,7 @@ Scope {
                                         anchors.fill: parent
                                         text: "Search your apps..."
                                         font: searchInput.font
-                                        color: Root.Theme.textSecondary
+                                        color: Appearance.colors.colSubtext
                                         visible: !searchInput.text
                                         verticalAlignment: Text.AlignVCenter
                                     }
@@ -692,12 +712,12 @@ Scope {
                                         height: 28
                                         radius: 14
                                         color: launcher.selectedCategory === modelData
-                                            ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.85)
-                                            : Qt.rgba(Root.Theme.surfaceContainer.r, Root.Theme.surfaceContainer.g, Root.Theme.surfaceContainer.b, 0.5)
+                                            ? Appearance.colors.colSecondaryContainer
+                                            : ColorUtils.transparentize(Appearance.colors.colSurfaceContainer, 0.5)
                                         border.width: 1
                                         border.color: launcher.selectedCategory === modelData
                                             ? "transparent"
-                                            : Qt.rgba(Root.Theme.panelBorder.r, Root.Theme.panelBorder.g, Root.Theme.panelBorder.b, 0.25)
+                                            : Appearance.colors.colLayer0Border
                                         Behavior on color { ColorAnimation { duration: 120 } }
 
                                         Text {
@@ -705,10 +725,10 @@ Scope {
                                             anchors.centerIn: parent
                                             text: modelData
                                             font.pixelSize: 11
-                                            font.family: Root.Theme.fontFamily
+                                            font.family: Appearance.font.family.main
                                             color: launcher.selectedCategory === modelData
-                                                ? Root.Theme.textPrimary
-                                                : Root.Theme.textSecondary
+                                                ? Appearance.colors.colOnSecondaryContainer
+                                                : Appearance.colors.colSubtext
                                         }
 
                                         MouseArea {
@@ -778,8 +798,8 @@ Scope {
                                         Text {
                                             text: "Recent"
                                             font.pixelSize: 12
-                                            font.family: Root.Theme.fontFamily
-                                            color: Root.Theme.textSecondary
+                                            font.family: Appearance.font.family.main
+                                            color: Appearance.colors.colSubtext
                                         }
 
                                         Row {
@@ -803,7 +823,7 @@ Scope {
                                         Rectangle {
                                             width: parent.width
                                             height: 1
-                                            color: Qt.rgba(Root.Theme.textSecondary.r, Root.Theme.textSecondary.g, Root.Theme.textSecondary.b, 0.3)
+                                            color: Qt.rgba(Appearance.colors.colSubtext.r, Appearance.colors.colSubtext.g, Appearance.colors.colSubtext.b, 0.3)
                                         }
                                     }
 
@@ -839,9 +859,9 @@ Scope {
                             Text {
                                 anchors.centerIn: parent
                                 text: "No apps found"
-                                font.pixelSize: Root.Theme.fontSizeNormal
-                                font.family: Root.Theme.fontFamily
-                                color: Root.Theme.textSecondary
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.family: Appearance.font.family.main
+                                color: Appearance.colors.colSubtext
                                 visible: launcher.filteredApps.length === 0
                             }
                         }

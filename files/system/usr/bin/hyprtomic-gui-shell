@@ -78,6 +78,11 @@ gui_env=(
     # Force the Wayland QPA plugin: without a display Qt falls back to xcb and
     # dies with "no Qt platform plugin could be initialized".
     "QT_QPA_PLATFORM=wayland"
+    # DesktopEntries (ii search / app drawer) only scans XDG_DATA_DIRS. Point
+    # it at the host flatpak exports (bind-mounted by distrobox) plus the
+    # container's own data dirs, so both host flatpaks and container apps are
+    # listed.
+    "XDG_DATA_DIRS=${HOME}/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share"
 )
 
 # VM (virtio-gpu): Qt's EGL path fails ("egl failed to create dri2 screen"),

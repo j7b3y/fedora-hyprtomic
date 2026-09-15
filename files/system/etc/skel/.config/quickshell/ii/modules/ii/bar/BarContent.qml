@@ -186,8 +186,7 @@ Item { // Bar content region
             icon: "volume_up"
             tooltipText: Translation.tr("Scroll to change volume")
             side: "right"
-            anchors.right: clockWidget.left
-            anchors.rightMargin: 6
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
         }
 

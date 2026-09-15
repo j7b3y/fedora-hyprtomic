@@ -3,6 +3,9 @@
   "bar": {
     "bottom": true
   },
+  "policies": {
+    "weeb": 0
+  },
   "apps": {
     "terminal": "ghostty -e",
     "changePassword": "ghostty -e fish -i -c 'passwd'",

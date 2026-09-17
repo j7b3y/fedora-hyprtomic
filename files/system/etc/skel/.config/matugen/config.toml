@@ -33,6 +33,8 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
 
-[templates.fastfetch]
-input_path = '~/.config/matugen/templates/fastfetch/config.jsonc'
-output_path = '~/.config/fastfetch/config.jsonc'
+# NOTE: fastfetch is intentionally NOT a matugen template. Its config is a
+# static, hand-tuned file synced from /etc/skel; the old template here emitted
+# a different (shorter) config and reverted the tuned one on every wallpaper
+# change. Re-add a [templates.fastfetch] block only if the tuned config is
+# rewritten to use {{colors.*}} placeholders.

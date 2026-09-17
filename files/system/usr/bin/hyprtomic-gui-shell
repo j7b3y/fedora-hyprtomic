@@ -21,6 +21,17 @@ exists() {
     distrobox list --no-color 2>/dev/null | grep -qw "$CONTAINER"
 }
 
+# Older images exported the container's ghostty to ~/.local/bin. That shim
+# shadows the host ghostty on PATH, so the terminal keybind opened an Arch
+# container shell. Remove it if it is (still) a distrobox wrapper; the
+# container is entered explicitly with `distrobox enter $CONTAINER`.
+remove_stale_ghostty_shim() {
+    local shim="$HOME/.local/bin/ghostty"
+    if [ -f "$shim" ] && grep -q "distrobox" "$shim" 2>/dev/null; then
+        rm -f "$shim"
+    fi
+}
+
 # BlueBuild's post_build wipes /var in the image (ostree assumption), so the
 # standard skeleton and a machine-id are (re)created once inside the container.
 init_container() {
@@ -33,8 +44,11 @@ init_container() {
 
     # Expose container-side GUI tools on the host PATH (shims that re-enter the
     # container) so Hyprland keybinds/scripts can call them transparently.
+    # ghostty is NOT exported: the host has its own ghostty (install-ghostty.sh
+    # via the scottames/ghostty COPR), and a container shim here would shadow it
+    # on PATH and turn Super+Q into an Arch-container shell.
     distrobox enter "$CONTAINER" -- bash -lc '
-        for bin in ghostty hypremoji hyprbind fuzzel wlogout swappy hyprpicker; do
+        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
@@ -104,6 +118,7 @@ case "${1:-}" in
     status) distrobox list --no-color | grep -E "NAME|$CONTAINER" || true ;;
     "" )
         ensure || exit 1
+        remove_stale_ghostty_shim
         # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
         # loses it, and QML errors are the usual reason the bar does not appear.
         log="$HOME/.local/state/hyprtomic/gui-session.log"

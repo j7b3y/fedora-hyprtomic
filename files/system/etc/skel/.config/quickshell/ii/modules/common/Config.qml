@@ -514,7 +514,6 @@ Singleton {
                 property JsonObject cornerOpen: JsonObject {
                     property bool enable: true
                     property bool bottom: false
-                    property bool valueScroll: true
                     property bool clickless: false
                     property int cornerRegionWidth: 250
                     property int cornerRegionHeight: 5

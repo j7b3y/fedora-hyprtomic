@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -27,6 +28,8 @@ Item {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        // Same affordance as the indicator button: open quick settings.
+        onClicked: GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen
 
         ClockWidgetPopup {
             hoverTarget: mouseArea

@@ -2,18 +2,15 @@ import qs.modules.ii.bar.weather
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Services.UPower
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 
 Item { // Bar content region
     id: root
 
     property var screen: root.QsWindow.window?.screen
-    property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
     property real useShortenedForm: (Appearance.sizes.barHellaShortenScreenWidthThreshold >= screen?.width) ? 2 : (Appearance.sizes.barShortenScreenWidthThreshold >= screen?.width) ? 1 : 0
 
     // Background shadow
@@ -38,34 +35,12 @@ Item { // Bar content region
         border.color: Appearance.colors.colLayer0Border
     }
 
-    FocusedScrollMouseArea { // Left side | scroll to change brightness
-        id: barLeftSideMouseArea
-
+    Item { // Left side (app drawer button only; no scroll-to-brightness)
         anchors {
             top: parent.top
             bottom: parent.bottom
             left: parent.left
             right: middleSection.left
-        }
-        implicitWidth: leftSectionRowLayout.implicitWidth
-        implicitHeight: Appearance.sizes.baseBarHeight
-
-        onScrollDown: Brightness.decreaseBrightness()
-        onScrollUp: Brightness.increaseBrightness()
-        onMovedAway: GlobalStates.osdBrightnessOpen = false
-        onPressed: event => {
-            if (event.button === Qt.LeftButton)
-                GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
-        }
-
-        // Visual content
-        ScrollHint {
-            reveal: barLeftSideMouseArea.hovered
-            icon: Hyprsunset.gamma === 100 ? "light_mode" : "wb_twilight"
-            tooltipText: Translation.tr("Scroll to change brightness")
-            side: "left"
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         RowLayout {
@@ -77,13 +52,6 @@ Item { // Bar content region
                 id: appDrawerButton
                 Layout.alignment: Qt.AlignVCenter
                 Layout.leftMargin: Appearance.rounding.screenRounding
-            }
-
-            LeftSidebarButton { // Left sidebar button
-                id: leftSidebarButton
-                Layout.alignment: Qt.AlignVCenter
-                Layout.leftMargin: 5
-                colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
             }
         }
     }
@@ -120,8 +88,8 @@ Item { // Bar content region
         }
     }
 
-    FocusedScrollMouseArea { // Right side | scroll to change volume
-        id: barRightSideMouseArea
+    Item { // Right side (no scroll-to-volume; children handle their own clicks)
+        id: rightSection
 
         anchors {
             top: parent.top
@@ -131,22 +99,6 @@ Item { // Bar content region
         }
         implicitWidth: rightSectionRowLayout.implicitWidth
         implicitHeight: Appearance.sizes.baseBarHeight
-
-        onScrollDown: Audio.decrementVolume();
-        onScrollUp: Audio.incrementVolume();
-        onMovedAway: GlobalStates.osdVolumeOpen = false;
-        // Quick settings (right sidebar) only open from the indicator button;
-        // clicking the empty bar area does nothing.
-
-        // Visual content
-        ScrollHint {
-            reveal: barRightSideMouseArea.hovered
-            icon: "volume_up"
-            tooltipText: Translation.tr("Scroll to change volume")
-            side: "right"
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-        }
 
         RowLayout {
             id: rightSectionRowLayout
@@ -172,7 +124,6 @@ Item { // Bar content region
                 implicitHeight: indicatorsRowLayout.implicitHeight + 5 * 2
 
                 buttonRadius: Appearance.rounding.full
-                colBackground: barRightSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
                 colBackgroundHover: Appearance.colors.colLayer1Hover
                 colRipple: Appearance.colors.colLayer1Active
                 colBackgroundToggled: Appearance.colors.colSecondaryContainer

@@ -4,7 +4,6 @@ import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -12,9 +11,8 @@ import Quickshell.Hyprland
 Scope {
     id: screenCorners
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
+    // Left corners are inert: the left sidebar is omitted in HyprTomic.
     property var actionForCorner: ({
-        [RoundCorner.CornerEnum.TopLeft]: () => GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen,
-        [RoundCorner.CornerEnum.BottomLeft]: () => GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen,
         [RoundCorner.CornerEnum.TopRight]: () => GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen,
         [RoundCorner.CornerEnum.BottomRight]: () => GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen
     })
@@ -64,6 +62,7 @@ Scope {
                 active: {
                     if (!Config.options.sidebar.cornerOpen.enable) return false;
                     if (cornerPanelWindow.fullscreen) return false;
+                    if (cornerWidget.isLeft) return false; // left sidebar omitted
                     return (Config.options.sidebar.cornerOpen.bottom == cornerWidget.isBottom);
                 }
                 anchors {
@@ -92,36 +91,6 @@ Scope {
                     }
                     onPressed: {
                         screenCorners.actionForCorner[cornerPanelWindow.corner]();
-                    }
-                    onScrollDown: {
-                        if (!Config.options.sidebar.cornerOpen.valueScroll)
-                            return;
-                        if (cornerWidget.isLeft)
-                            Brightness.decreaseBrightness()
-                        else {
-                            const currentVolume = Audio.value;
-                            const step = currentVolume < 0.1 ? 0.01 : 0.02 || 0.2;
-                            Audio.sink.audio.volume -= step;
-                        }
-                    }
-                    onScrollUp: {
-                        if (!Config.options.sidebar.cornerOpen.valueScroll)
-                            return;
-                        if (cornerWidget.isLeft)
-                            Brightness.increaseBrightness()
-                        else {
-                            const currentVolume = Audio.value;
-                            const step = currentVolume < 0.1 ? 0.01 : 0.02 || 0.2;
-                            Audio.sink.audio.volume = Math.min(1, Audio.sink.audio.volume + step);
-                        }
-                    }
-                    onMovedAway: {
-                        if (!Config.options.sidebar.cornerOpen.valueScroll)
-                            return;
-                        if (cornerWidget.isLeft)
-                            GlobalStates.osdBrightnessOpen = false;
-                        else
-                            GlobalStates.osdVolumeOpen = false;
                     }
 
                     Loader {

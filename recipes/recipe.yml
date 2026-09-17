@@ -24,9 +24,9 @@ modules:
       BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
       DEFAULT_HOSTNAME: "hyprtomic"
 
-  # 2. System-layer packages (Fedora official + the end-4 COPR only for the
-  #    Bibata cursor theme, which the compositor loads and Fedora does not ship;
-  #    the GUI shell itself lives in the Arch container)
+  # 2. System-layer packages (Fedora official + one COPR for the Bibata cursor
+  #    theme, which the compositor loads and Fedora does not ship; the GUI
+  #    shell itself lives in the Arch container)
   - type: dnf
     repos:
       cleanup: true
@@ -36,8 +36,8 @@ modules:
       skip-unavailable: true
       packages:
         # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
-        # The GUI shell (quickshell + ii helpers) is NOT installed here: it lives
-        # in the Arch GUI container (ghcr.io/j7b3y/hyprtomic-gui).
+        # The GUI shell is NOT installed here: it lives in the Arch GUI container
+        # (ghcr.io/j7b3y/hyprtomic-gui).
         # SDDM astronaut theme deps
         - qt6-qtsvg
         - qt6-qtvirtualkeyboard
@@ -50,20 +50,20 @@ modules:
         - pavucontrol
         # Network
         - NetworkManager
-        # Bluetooth (managed via the quickshell BluetoothSection)
+        # Bluetooth (managed by the GUI shell)
         - bluez
         # Auth base (polkit + hyprpolkitagent provided by wayblue base)
         - gnome-keyring
         # Qt wayland backend
         - qt5-qtwayland
-        # Fonts (base set; end-4 decoration fonts + IME live in the GUI container)
+        # Fonts (base set; decoration fonts + IME live in the GUI container)
         - google-noto-sans-cjk-fonts
         - google-noto-color-emoji-fonts
         - twitter-twemoji-fonts
         # Cursor theme (loaded by the compositor, so it must be on the host)
         - bibata-cursor-theme
-        # Bar / notifications: provided by quickshell in the GUI container
-        # (waybar/dunst/swaybg removed -- end-4 uses its own shell).
+        # Bar / notifications: provided by the GUI shell in the container
+        # (waybar/dunst/swaybg are not used).
         # Screenshot / clipboard
         - grim
         - slurp
@@ -85,11 +85,10 @@ modules:
         - tumbler
         # IME: managed inside the GUI container (fcitx5 + engine there), so the
         # input method is available to the container's GUI apps.
-        # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
+        # Input/automation helpers used by the shell and tools
         - wtype
         - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)
         - python3-cairo
-        - google-noto-color-emoji-fonts
         # Common dev tools (used across all dev envs)
         - git
         - git-credential-oauth
@@ -110,7 +109,6 @@ modules:
     scripts:
       - install-ghostty.sh
       - install-sddm-theme.sh
-      - install-hazkey.sh
       - finalize.sh
 
   # 5. Enable firstboot/session services (hostname, user groups, zsh default;

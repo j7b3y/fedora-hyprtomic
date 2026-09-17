@@ -1,7 +1,7 @@
 # HyprTomic ujust recipes.
 # Loaded by ublue-os-just's justfile via `import "/usr/share/ublue-os/just/60-custom.just"`.
 
-# --- GUI container (Arch distrobox; the end-4 shell + helpers live there) ---
+# --- GUI container (Arch distrobox; the shell + GUI helpers live there) ---
 
 # Create and initialize the GUI container (safe to re-run).
 gui-container-setup:

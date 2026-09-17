@@ -3,18 +3,17 @@ set -euo pipefail
 # Remaining AUR packages + a bundled binary package for the HyprTomic GUI
 # container. Relies on the builder user and yay from gui-02-quickshell.sh.
 #
-# NOTE: microtex-git (ii LaTeX widget) is omitted for now: its 2024 source
-# snapshot fails to compile against the current Arch toolchain. clipryx
-# (dotnet-sdk) is deferred for build size.
+# NOTE: microtex-git (LaTeX widget used by some dotfile sets) is omitted: its
+# 2024 source snapshot fails to compile against the current Arch toolchain.
 AUR_PKGS=(
   mozkey-ibg-bin     # Japanese IME engine (Mozkey IbG, prebuilt for fcitx5)
   wlogout
-  hypremoji           # Base Dotfiles' hypr-emoji-picker replacement
+  hypremoji           # emoji picker
   darkly-bin
   breeze-plus
   adw-gtk-theme-git
   bibata-cursor-theme
-  # end-4 decoration fonts (base is noto-fonts-cjk + noto-fonts-emoji)
+  # decoration fonts (base set is noto-fonts-cjk + noto-fonts-emoji)
   otf-space-grotesk
   ttf-readex-pro
   ttf-rubik-vf

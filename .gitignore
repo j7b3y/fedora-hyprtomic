@@ -5,3 +5,6 @@ cosign.private
 *.iso-CHECKSUM
 /opencode.json
 /opencode.jsonc
+
+# Local notes (handoff/brainstorm) are not part of the repo.
+docs/

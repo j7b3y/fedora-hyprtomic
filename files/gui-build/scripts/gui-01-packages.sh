@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Official Arch packages for the HyprTomic GUI container (end-4 illogical-impulse).
-# AUR packages are handled in gui-02-aur.sh.
+# Official Arch packages for the HyprTomic GUI container (GUI foundation + apps).
+# AUR packages are handled in gui-03-aur.sh.
 
 pacman-key --init
 pacman-key --populate archlinux
@@ -12,10 +12,10 @@ PACMAN_PKGS=(
   base-devel git go
   fish eza starship btop fastfetch jq go-yq ripgrep wget rsync unzip bc uv
   python-pip python-gobject python-cairo
-  # terminal (the only GUI terminal; exported to the host PATH by
-  # hyprtomic-gui-shell so the ii terminal keybind works)
+  # terminal (container side; the host has its own ghostty from
+  # install-ghostty.sh, so this one stays inside the container)
   ghostty
-  # ii widgets / apps
+  # GUI apps / widgets
   fuzzel cava libqalculate songrec translate-shell hyprpicker wf-recorder swappy
   tesseract tesseract-data-eng tesseract-data-jpn imagemagick
   wtype cliphist brightnessctl playerctl libnotify dex
@@ -38,7 +38,7 @@ PACMAN_PKGS=(
   fcitx5 fcitx5-gtk fcitx5-qt fcitx5-configtool
   # screenshot / clipboard / hardware clients
   grim slurp wl-clipboard upower ddcutil bluez bluez-utils
-  # compositor: present for libraries/IPC used by hypremoji/hyprbind/snipland
+  # compositor: present for libraries/IPC used by hypremoji/hyprbind
   # (the actual session runs on the host; this is not started in the container)
   hyprland
 )

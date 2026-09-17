@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Add human users to the groups the session needs (mirrors upstream dots-hyprland
-# 2.setups.sh `usermod -aG video,input`). Idempotent; runs on every boot so
+# Add human users to the groups the session needs (video/input). Idempotent;
+# runs on every boot so
 # accounts created after the image is installed are covered too.
 set -u
 

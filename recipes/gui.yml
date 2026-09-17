@@ -1,7 +1,7 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: hyprtomic-gui
-description: Arch-based HyprTomic GUI container (end-4 illogical-impulse) run via distrobox
+description: Arch-based HyprTomic GUI container (GUI foundation/apps) run via distrobox
 
 # Plain (non-bootable) Arch container consumed by distrobox on the HyprTomic
 # host. BlueBuild's non-Fedora support is experimental and targets bootc images;
@@ -26,7 +26,7 @@ modules:
         COPY files/gui-build/scripts/gui-02-quickshell.sh /tmp/gui-02-quickshell.sh
         RUN bash /tmp/gui-02-quickshell.sh
 
-  # 2. Official Arch packages (base tooling, ii widgets, Qt6 stack, fonts, IME).
+  # 2. Official Arch packages (base tooling, GUI apps, Qt6 stack, fonts, IME).
   - type: containerfile
     snippets:
       - |
@@ -40,16 +40,16 @@ modules:
         COPY files/gui-build/scripts/gui-03-aur.sh /tmp/gui-03-aur.sh
         RUN bash /tmp/gui-03-aur.sh
 
-  # 3b. Google Sans Flex (end-4 default UI font), extracted from end-4's Fedora
-  #     RPM since it is not packaged for Arch/AUR.
+  # 3b. Google Sans Flex (optional UI font used by the dotfiles), extracted from
+  #     the upstream Fedora RPM since it is not packaged for Arch/AUR.
   - type: containerfile
     snippets:
       - |
         COPY files/gui-build/scripts/gui-04-fonts.sh /tmp/gui-04-fonts.sh
         RUN bash /tmp/gui-04-fonts.sh
 
-  # 4. Container-side assets: the illogical-impulse session entrypoint and the
-  #    python requirements used to build the shell venv in $HOME.
+  # 4. Container-side assets: the GUI session entrypoint and the python
+  #    requirements used to build the shell venv in $HOME.
   - type: files
     files:
       - source: gui

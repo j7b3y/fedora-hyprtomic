@@ -1,0 +1,8 @@
+[Nemo Action]
+Name=Open in VSCode
+Comment=Open selected file or folder in Visual Studio Code
+Exec=<scripts/open-in-vscode.sh %F>
+Icon-Name=visual-studio-code
+Selection=any
+Extensions=dir;
+Quote=double

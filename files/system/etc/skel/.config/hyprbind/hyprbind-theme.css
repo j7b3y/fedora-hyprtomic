@@ -1,0 +1,11 @@
+/* HyprBind theme — Catppuccin Mocha Blue (matches dotfiles palette) */
+:root {
+    --bg:        #0F1117;  /* base */
+    --fg:        #E0E2F0;  /* text */
+    --panel:     #151922;  /* mantle */
+    --accent:    #9BBDE8;  /* blue */
+    --stroke:    #3A3E60;  /* surface2 */
+    --selection: #2E3148;  /* surface0 */
+    --radius:    6;
+    --spacing:   6;
+}

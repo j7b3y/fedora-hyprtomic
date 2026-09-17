@@ -10,6 +10,13 @@ set -uo pipefail
 
 QS_CONFIG="${HYPRTOMIC_QS_CONFIG:-ii}"
 
+# IME: fcitx5 runs in the container; host GTK/Qt apps reach it through the
+# shared session bus and the IME env vars exported by the Hyprland session.
+fcitx5 -d >/dev/null 2>&1 &
+
+# Clipboard history daemon (clipse; Super+V opens clipse-gui).
+command -v clipse >/dev/null 2>&1 && clipse -listen >/dev/null 2>&1 &
+
 # Clipboard history (cliphist + wl-clipboard live in the container) and notify
 # the shell's clipboard service. The IPC call is a no-op for configs that do not
 # expose a cliphistService.

@@ -1,0 +1,67 @@
+/* Ghostty タブバー - Pure Black ベース + 白色系で視認性向上 */
+
+/* タブバー全体の背景 */
+tabbar > revealer > box {
+    background-color: #121212;
+    background-image: none;
+    padding: 0;
+    margin: 0;
+    border-top: 1px solid #2a2a2a;
+}
+
+/* 各タブ (非アクティブ) */
+tabbar tab {
+    background-color: #121212;
+    background-image: none;
+    color: #999999;
+    padding: 2px 12px;
+    margin: 0;
+    border-bottom: 2px solid transparent;
+    transition: 100ms;
+}
+
+/* アクティブタブ */
+tabbar tab:selected {
+    background-color: #1e1e1e;
+    background-image: none;
+    color: #ffffff;
+    border-bottom: 3px solid #ffffff;
+}
+
+/* ホバー時 */
+tabbar tab:hover:not(:selected) {
+    background-color: #181818;
+    background-image: none;
+    color: #dddddd;
+}
+
+/* タブ区切り線を消す */
+tabbar tab separator {
+    background-color: transparent;
+}
+
+/* 新規タブボタン */
+tabbar startactionbar,
+tabbar endactionbar {
+    background-color: #121212;
+    background-image: none;
+}
+
+/* 新規タブ + ボタン */
+tabbar startactionbar button,
+tabbar endactionbar button {
+    color: #999999;
+    background-color: transparent;
+    background-image: none;
+}
+
+tabbar startactionbar button:hover,
+tabbar endactionbar button:hover {
+    color: #ffffff;
+    background-color: #1e1e1e;
+}
+
+/* スクロール可能タブの矢印 */
+tabbar scrolledwindow {
+    background-color: #121212;
+}

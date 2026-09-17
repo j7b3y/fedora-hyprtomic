@@ -48,7 +48,8 @@ init_container() {
     # via the scottames/ghostty COPR), and a container shim here would shadow it
     # on PATH and turn Super+Q into an Arch-container shell.
     distrobox enter "$CONTAINER" -- bash -lc '
-        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker; do
+        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
+                   rofi clipse-gui clipse; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
@@ -72,7 +73,10 @@ init_container() {
 ensure() {
     if ! exists; then
         echo "Creating GUI container '$CONTAINER' from $IMAGE ..." >&2
-        distrobox create --name "$CONTAINER" --image "$IMAGE" -Y --no-entry || return 1
+        # Mount the host's system flatpak exports read-only so the shell's
+        # DesktopEntries / icon resolver see host flatpaks (icons + .desktop).
+        distrobox create --name "$CONTAINER" --image "$IMAGE" -Y --no-entry \
+            --volume /var/lib/flatpak:/var/lib/flatpak:ro || return 1
         init_container || return 1
     fi
 }
@@ -134,6 +138,6 @@ case "${1:-}" in
         # Pass any other arguments straight through to quickshell in the container.
         ensure || exit 1
         exec distrobox enter "$CONTAINER" -- \
-            env "${gui_env[@]}" bash -lc 'exec qs "$@"' bash "$@"
+            env "${gui_env[@]}" bash -lc 'exec qs -c "$HYPRTOMIC_QS_CONFIG" "$@"' bash "$@"
         ;;
 esac

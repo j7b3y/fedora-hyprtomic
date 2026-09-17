@@ -26,6 +26,15 @@ and shipped as packages or binaries; all rights remain with the upstream authors
 Dotfiles that are synced from `/etc/skel` are added per-branch by their authors;
 anything vendored there must ship its own license alongside it.
 
+## Dotfiles vendored into `/etc/skel`
+
+| Path in `/etc/skel` | Source | License |
+|---|---|---|
+| `.config/quickshell/ii/` and `.config/hypr/` (hyprland.lua, hyprlock, hypridle, quadgrid.lua, scripts) | the user's own dotfiles (ported from the Arch `dotfiles` repo) | none (self-authored) |
+| `.config/Kvantum/catppuccin-mocha-blue/` | [catppuccin/kvantum](https://github.com/catppuccin/kvantum) theme "catppuccin-mocha-blue" | GPL-3.0 (see `catppuccin-kvantum-LICENSE.txt`) |
+| `.local/share/backgrounds/wallpaper.jpg` | personal asset | none (personal) |
+| `.config/gtk-3.0/gtk.css`, `.config/gtk-4.0/gtk.css` | adapted from the `gui/arch-container` branch's matugen GTK templates | per the original matugen/Base Dotfiles upstream |
+
 ## Build-time references
 
 - [BlueBuild](https://blue-build.org/) image pipeline & [ublue-os](https://universal-blue.org/) just/system plumbing

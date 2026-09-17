@@ -60,10 +60,14 @@ modules:
         - google-noto-sans-cjk-fonts
         - google-noto-color-emoji-fonts
         - twitter-twemoji-fonts
+        # Icon theme (host GTK apps: nemo etc.; the GUI container ships its own)
+        - papirus-icon-theme
         # Cursor theme (loaded by the compositor, so it must be on the host)
         - bibata-cursor-theme
         # Bar / notifications: provided by the GUI shell in the container
-        # (waybar/dunst/swaybg are not used).
+        # (waybar/dunst are not used). swaybg sets the desktop wallpaper
+        # (hyprland.lua autostart) since the shell has no background module.
+        - swaybg
         # Screenshot / clipboard
         - grim
         - slurp

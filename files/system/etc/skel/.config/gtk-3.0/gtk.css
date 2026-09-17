@@ -1,0 +1,31 @@
+/*
+ * GTK3 palette for the default md3-cobalt-night theme (nemo, etc.).
+ * Keep in sync with ~/.config/quickshell/ii/Theme.qml and
+ * ~/.config/quickshell/ii/scripts/apply-theme.sh.
+ */
+
+@define-color bg_color #0F1117;
+@define-color fg_color #E0E2F0;
+@define-color base_color #0F1117;
+@define-color text_color #E0E2F0;
+@define-color selected_bg_color #9BBDE8;
+@define-color selected_fg_color #0F1117;
+@define-color tooltip_bg_color #2E3148;
+@define-color tooltip_fg_color #E0E2F0;
+@define-color theme_bg_color #0F1117;
+@define-color theme_fg_color #E0E2F0;
+@define-color theme_base_color #0F1117;
+@define-color theme_text_color #E0E2F0;
+@define-color theme_selected_bg_color #9BBDE8;
+@define-color theme_selected_fg_color #0F1117;
+@define-color theme_unfocused_bg_color #1A1C28;
+@define-color theme_unfocused_fg_color #8E90A8;
+@define-color theme_unfocused_base_color #0F1117;
+@define-color theme_unfocused_text_color #8E90A8;
+@define-color borders #252740;
+@define-color unfocused_borders #1A1C28;
+@define-color warning_color #F2D479;
+@define-color error_color #F2A8B8;
+@define-color success_color #86D5A0;
+@define-color insensitive_bg_color #1A1C28;
+@define-color insensitive_fg_color #8E90A8;

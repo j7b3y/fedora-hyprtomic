@@ -2,3 +2,16 @@
 # (per-user gsettings still overrides; the dotfiles own font choices)
 [org/gnome/desktop/interface]
 color-scheme='prefer-dark'
+gtk-theme='Adwaita'
+icon-theme='Papirus-Dark'
+font-name='Noto Sans Light 9'
+cursor-theme='Bibata-Modern-Classic'
+cursor-size=36
+
+# Cinnamon schemas (also used by nemo)
+[org/cinnamon/desktop/interface]
+gtk-theme='Adwaita'
+icon-theme='Papirus-Dark'
+font-name='Noto Sans Light 9'
+cursor-theme='Bibata-Modern-Classic'
+cursor-size=36

@@ -9,15 +9,11 @@ AUR_PKGS=(
   mozkey-ibg-bin     # Japanese IME engine (Mozkey IbG, prebuilt for fcitx5)
   wlogout
   hypremoji           # emoji picker
-  darkly-bin
-  breeze-plus
-  adw-gtk-theme-git
+  clipse              # clipboard history daemon (clipse -listen)
+  clipse-gui          # clipboard history UI (Super+V)
   bibata-cursor-theme
-  # decoration fonts (base set is noto-fonts-cjk + noto-fonts-emoji)
-  otf-space-grotesk
-  ttf-readex-pro
-  ttf-rubik-vf
-  ttf-twemoji
+  ttf-hackgen-nerd    # ghostty font (HackGen Console NF)
+  ttf-twemoji         # emoji fallback font
 )
 
 # hyprbind: Base Dotfiles tool, shipped as a prebuilt Arch package.

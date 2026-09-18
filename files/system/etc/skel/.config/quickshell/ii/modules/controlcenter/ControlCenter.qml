@@ -157,6 +157,10 @@ Scope {
         command: ["sh", "-c", "~/.config/quickshell/ii/scripts/apply-theme.sh " + Root.Theme.currentTheme]
     }
 
+    // Re-apply the saved theme on every shell start so Hyprland / Qt / GTK /
+    // ghostty stay in sync even when the theme did not change.
+    Component.onCompleted: themeApplyProc.running = true
+
     Connections {
         target: Root.Theme
         function onCurrentThemeChanged() {

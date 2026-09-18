@@ -1,7 +1,0 @@
-# Python dependencies for the HyprTomic quickshell venv
-# (~/.local/state/quickshell/.venv, built once by hyprtomic-gui-shell).
-#
-# The current shell (quickshell/ii) only needs resolve-icons.py, which uses the
-# container's system python-gobject + gtk3 (installed in gui-01-packages.sh).
-# No pip packages are required; keep this list empty until the dotfiles import
-# something else.

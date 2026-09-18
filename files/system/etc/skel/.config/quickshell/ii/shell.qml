@@ -7,6 +7,7 @@ import "modules/controlcenter" as ControlCenter
 import "modules/notifications" as Notifications
 import "modules/launcher" as Launcher
 import "modules/osd" as Osd
+import "modules/shelf" as Shelf
 
 ShellRoot {
     id: root
@@ -30,6 +31,10 @@ ShellRoot {
     // --- Module Instances ---
     // Each component manages its own visibility and IPC handler internally.
     // Nothing auto-opens on startup.
+
+    Shelf.Shelf {
+        id: shelf
+    }
 
     PowerMenu.PowerMenu {
         id: powerMenu

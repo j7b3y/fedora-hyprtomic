@@ -42,6 +42,17 @@ Scope {
         id: appLauncher
     }
 
+    // Quick settings (control center) IPC — used by the bottom-right hot strip.
+    Process {
+        id: ccShowProc
+        command: ["qs", "-c", "ii", "ipc", "call", "controlcenter", "show"]
+    }
+
+    Process {
+        id: ccToggleProc
+        command: ["qs", "-c", "ii", "ipc", "call", "controlcenter", "toggle"]
+    }
+
     Component.onCompleted: iconResolveProc.running = true
 
     function resolveIcon(name) {
@@ -98,6 +109,32 @@ Scope {
                 anchors.bottom: parent.bottom
                 height: Root.Theme.radiusLarge
                 color: parent.color
+            }
+
+            // ── Bottom-right hot strip (quick settings) ────────────
+            // Thin strip along the shelf's bottom-right edge: hovering opens
+            // the control center, clicking toggles it. It lives in the shelf's
+            // reserved area, so it never steals input from windows.
+            MouseArea {
+                id: quickSettingsCorner
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                width: Math.min(parent.width / 3, 220)
+                height: 6
+                acceptedButtons: Qt.LeftButton
+                hoverEnabled: true
+                onEntered: ccCornerTimer.start()
+                onExited: ccCornerTimer.stop()
+                onClicked: ccToggleProc.running = true
+
+                Timer {
+                    id: ccCornerTimer
+                    // Long enough to be deliberate: the pointer has to rest on
+                    // the very bottom edge of the shelf.
+                    interval: 500
+                    repeat: false
+                    onTriggered: ccShowProc.running = true
+                }
             }
 
             RowLayout {

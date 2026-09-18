@@ -6,9 +6,11 @@ A personal Fedora Atomic (wayblue) desktop image with a split architecture:
 - **GUI container** — an Arch distrobox image (`ghcr.io/j7b3y/hyprtomic-gui`) that carries the GUI foundation (quickshell, Qt6) and the GUI apps, started from the host by `hyprtomic-gui-shell`.
 - **Dotfiles** — baked into `/etc/skel` and synced into `$HOME` with a ujust recipe (`$HOME` is shared with the container).
 
-> This branch is the **base scaffold**: system, container pipeline and sync
-> mechanism only. The dotfiles (Hyprland config, shell config, app configs) are
-> added on top; see [`AGENTS.md`](AGENTS.md) for the integration contract.
+> This branch carries the ported Arch dotfiles (Lua Hyprland config, the
+> quickshell shell with shelf / launcher / control-center / notifications, and
+> the app configs) on top of the system + GUI container pipeline. See
+> [`AGENTS.md`](AGENTS.md) for the architecture, the dotfile integration
+> contract and the theming pipeline.
 
 ## Repository layout
 

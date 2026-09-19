@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import "../.." as Root
 
@@ -48,6 +49,244 @@ Item {
             return;
         Pipewire.preferredDefaultAudioSink = node;
         root.deviceListOpen = false;
+    }
+
+    // ── Port / Profile (card settings via pactl) ───────────────────
+    // quickshell's Pipewire API does not expose sink ports or card
+    // profiles, so those come from pactl (the host's PipeWire-Pulse is
+    // reachable through the shared user socket).
+    property bool portListOpen: false
+    property bool profileListOpen: false
+    property var sinkPorts: []
+    property string activePort: ""
+    property var cardProfiles: []
+    property string activeProfile: ""
+    property string sinkKey: ""
+    property string sinkCardName: ""
+
+    readonly property string activePortLabel: {
+        for (let i = 0; i < root.sinkPorts.length; ++i) {
+            if (root.sinkPorts[i].name === root.activePort)
+                return root.sinkPorts[i].label;
+        }
+        return root.activePort;
+    }
+
+    readonly property string activeProfileLabel: {
+        for (let i = 0; i < root.cardProfiles.length; ++i) {
+            if (root.cardProfiles[i].name === root.activeProfile)
+                return root.cardProfiles[i].label;
+        }
+        return root.activeProfile;
+    }
+
+    // "alsa_output.pci-0000_0d_00.4.iec958-stereo" -> "pci-0000_0d_00.4.iec958-stereo"
+    // (the card name shares the same key as a prefix, "alsa_card.pci-0000_0d_00.4").
+    function deviceKey(name) {
+        const i = name.indexOf(".");
+        return i >= 0 ? name.slice(i + 1) : name;
+    }
+
+    function toggleDeviceList() {
+        const open = !root.deviceListOpen;
+        root.deviceListOpen = open;
+        if (open) {
+            root.portListOpen = false;
+            root.profileListOpen = false;
+        }
+    }
+
+    function togglePortList() {
+        const open = !root.portListOpen;
+        root.portListOpen = open;
+        if (open) {
+            root.deviceListOpen = false;
+            root.profileListOpen = false;
+        }
+    }
+
+    function toggleProfileList() {
+        const open = !root.profileListOpen;
+        root.profileListOpen = open;
+        if (open) {
+            root.deviceListOpen = false;
+            root.portListOpen = false;
+        }
+    }
+
+    function refreshCardSettings() {
+        if (!root.audio)
+            return;
+        pactlSinksProc.running = true;
+        pactlCardsProc.running = true;
+    }
+
+    function applySinks(text) {
+        let sinks;
+        try { sinks = JSON.parse(text); } catch (e) { return; }
+        const name = root.audio && root.audio.name ? root.audio.name : "";
+        const ports = [];
+        let active = "";
+        let key = "";
+        for (let i = 0; i < sinks.length; ++i) {
+            if (sinks[i].name !== name)
+                continue;
+            const list = sinks[i].ports || [];
+            for (let j = 0; j < list.length; ++j) {
+                ports.push({
+                    name: list[j].name,
+                    label: list[j].description && list[j].description !== "(null)"
+                        ? list[j].description
+                        : list[j].name
+                });
+            }
+            active = sinks[i].active_port || "";
+            key = root.deviceKey(name);
+            break;
+        }
+        root.sinkPorts = ports;
+        root.activePort = active;
+        root.sinkKey = key;
+    }
+
+    function applyCards(text) {
+        let cards;
+        try { cards = JSON.parse(text); } catch (e) { return; }
+        if (root.sinkKey === "") {
+            root.cardProfiles = [];
+            root.activeProfile = "";
+            return;
+        }
+        const profiles = [];
+        let active = "";
+        let cardName = "";
+        for (let i = 0; i < cards.length; ++i) {
+            const key = root.deviceKey(cards[i].name);
+            if (!root.sinkKey.startsWith(key))
+                continue;
+            active = cards[i].active_profile || "";
+            cardName = cards[i].name;
+            const list = cards[i].profiles || {};
+            for (const name in list) {
+                const desc = list[name] ? list[name].description : "";
+                profiles.push({
+                    name: name,
+                    label: desc && desc !== "(null)"
+                        ? desc
+                        : name.replace(/^output:/, "").replace(/\+input:/, " + "),
+                    available: list[name] ? list[name].available !== false : true
+                });
+            }
+            break;
+        }
+        root.cardProfiles = profiles;
+        root.activeProfile = active;
+        root.sinkCardName = cardName;
+    }
+
+    function selectPort(portName) {
+        if (!portName || !root.audio)
+            return;
+        pactlSetPortProc.command = ["pactl", "set-sink-port", root.audio.name, portName];
+        pactlSetPortProc.running = true;
+        root.portListOpen = false;
+    }
+
+    function selectProfile(profileName) {
+        if (!profileName || root.sinkCardName === "")
+            return;
+        pactlSetProfileProc.command = ["pactl", "set-card-profile", root.sinkCardName, profileName];
+        pactlSetProfileProc.running = true;
+        root.profileListOpen = false;
+    }
+
+    Process {
+        id: pactlSinksProc
+        command: ["pactl", "-f", "json", "list", "sinks"]
+        stdout: StdioCollector { onStreamFinished: root.applySinks(text) }
+    }
+
+    Process {
+        id: pactlCardsProc
+        command: ["pactl", "-f", "json", "list", "cards"]
+        stdout: StdioCollector { onStreamFinished: root.applyCards(text) }
+    }
+
+    Process {
+        id: pactlSetPortProc
+        onExited: (code, status) => { if (code === 0) cardRefreshTimer.restart(); }
+    }
+
+    Process {
+        id: pactlSetProfileProc
+        onExited: (code, status) => { if (code === 0) cardRefreshTimer.restart(); }
+    }
+
+    Timer {
+        id: cardRefreshTimer
+        interval: 400
+        repeat: false
+        onTriggered: root.refreshCardSettings()
+    }
+
+    Component.onCompleted: root.refreshCardSettings()
+
+    Connections {
+        target: Pipewire
+        function onDefaultAudioSinkChanged() { root.refreshCardSettings(); }
+    }
+
+    // Shared row used by the port and profile lists.
+    component SettingsRow: Rectangle {
+        id: row
+        required property string label
+        required property bool current
+        signal activated()
+
+        Layout.fillWidth: true
+        implicitHeight: 34
+        radius: Root.Theme.radiusSmall
+        color: row.current
+            ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.18)
+            : (rowArea.containsMouse ? Root.Theme.surfaceContainerHigh : Root.Theme.surfaceContainer)
+        border.width: 1
+        border.color: row.current
+            ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.5)
+            : "transparent"
+
+        Behavior on color { ColorAnimation { duration: Root.Theme.animDurationFast } }
+
+        Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 12
+            anchors.rightMargin: 30
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.label
+            font.family: Root.Theme.fontFamily
+            font.pixelSize: Root.Theme.fontSizeSmall
+            color: row.current ? Root.Theme.textPrimary : Root.Theme.textSecondary
+            elide: Text.ElideRight
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.current
+            text: "✓"
+            font.family: Root.Theme.fontFamily
+            font.pixelSize: Root.Theme.fontSizeNormal
+            color: Root.Theme.primary
+        }
+
+        MouseArea {
+            id: rowArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: row.activated()
+        }
     }
 
     // ── Volume control ─────────────────────────────────────────────
@@ -120,7 +359,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.deviceListOpen = !root.deviceListOpen
+                onClicked: root.toggleDeviceList()
             }
         }
 
@@ -184,6 +423,156 @@ Item {
                             font.pixelSize: Root.Theme.fontSizeNormal
                             color: Root.Theme.primary
                         }
+                    }
+                }
+            }
+        }
+
+        // Port selector (sink ports: analog-output, hdmi-output-0, ...).
+        Rectangle {
+            visible: root.sinkPorts.length > 1
+            Layout.fillWidth: true
+            implicitHeight: 30
+            radius: Root.Theme.radiusSmall
+            color: portButtonArea.containsMouse ? Root.Theme.surfaceContainerHigh : "transparent"
+
+            Behavior on color { ColorAnimation { duration: Root.Theme.animDurationFast } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 8
+
+                Text {
+                    text: "Port"
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textDisabled
+                }
+
+                Text {
+                    text: root.activePortLabel
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textSecondary
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: root.portListOpen ? "▴" : "▾"
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textDisabled
+                }
+            }
+
+            MouseArea {
+                id: portButtonArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.togglePortList()
+            }
+        }
+
+        Flickable {
+            visible: root.portListOpen
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(portColumn.implicitHeight, 180)
+            contentHeight: portColumn.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ColumnLayout {
+                id: portColumn
+                width: parent.width
+                spacing: 4
+
+                Repeater {
+                    model: root.sinkPorts
+
+                    delegate: SettingsRow {
+                        required property var modelData
+                        label: modelData.label
+                        current: modelData.name === root.activePort
+                        onActivated: root.selectPort(modelData.name)
+                    }
+                }
+            }
+        }
+
+        // Profile selector (card profiles: output:analog-stereo, ...).
+        Rectangle {
+            visible: root.cardProfiles.length > 0
+            Layout.fillWidth: true
+            implicitHeight: 30
+            radius: Root.Theme.radiusSmall
+            color: profileButtonArea.containsMouse ? Root.Theme.surfaceContainerHigh : "transparent"
+
+            Behavior on color { ColorAnimation { duration: Root.Theme.animDurationFast } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 8
+
+                Text {
+                    text: "Profile"
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textDisabled
+                }
+
+                Text {
+                    text: root.activeProfileLabel
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textSecondary
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: root.profileListOpen ? "▴" : "▾"
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textDisabled
+                }
+            }
+
+            MouseArea {
+                id: profileButtonArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleProfileList()
+            }
+        }
+
+        Flickable {
+            visible: root.profileListOpen
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(profileColumn.implicitHeight, 180)
+            contentHeight: profileColumn.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ColumnLayout {
+                id: profileColumn
+                width: parent.width
+                spacing: 4
+
+                Repeater {
+                    model: root.cardProfiles
+
+                    delegate: SettingsRow {
+                        required property var modelData
+                        label: modelData.available ? modelData.label : modelData.label + " (unavailable)"
+                        current: modelData.name === root.activeProfile
+                        onActivated: root.selectProfile(modelData.name)
                     }
                 }
             }

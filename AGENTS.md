@@ -62,6 +62,11 @@ agent config must not be committed.
 Bridges between the two sides:
 
 - Container → host command: `distrobox-host-exec <cmd>` (e.g. flatpak launch).
+- Host system D-Bus: distrobox only shares the user session bus, so
+  `hyprtomic-gui-shell` (and `files/gui/etc/profile.d/00-hyprtomic-host-dbus.sh`
+  inside the image) points `DBUS_SYSTEM_BUS_ADDRESS` at
+  `/run/host/run/dbus/system_bus_socket`. That is what lets the container's
+  `bluetoothctl` / `nmcli` reach the host's BlueZ and NetworkManager.
 - Container → host entry: `distrobox enter hyprtomic-gui`.
 - Container app → host PATH: `distrobox-export --bin ...` in
   `hyprtomic-gui-shell init_container`. **Never export a binary that the host
@@ -226,6 +231,13 @@ End-to-end: on a test machine, update the host image, reboot, run
   powermenu / OSD. Quick settings (control center) open from the shelf's
   bottom-right cluster (click) or its thin bottom-right hot strip (hover), from
   `Super+A`, or via `qs -c ii ipc call controlcenter toggle`.
+- Shelf layout: rofi launcher button on the left, a 1..10 workspace pager with
+  per-workspace app icons in the center, and `[system tray][wifi/bt/battery/
+  volume][clock]` on the right — the clock shows `yyyy-MM-dd HH:mm`. System
+  tray right-click menus need `//@ pragma UseQApplication` in `shell.qml`.
+- Power actions in the power menu are forwarded to the host with
+  `distrobox-host-exec systemctl …` (the GUI container is not booted with
+  systemd).
 - The theme switcher keeps Hyprland, GTK, Qt/Kvantum, ghostty and rofi in sync
   (see "Theming"); `apply-theme.sh` runs on every shell start and on theme
   change.

@@ -4,12 +4,12 @@ import Quickshell.Io
 import Quickshell.Services.Pipewire
 import "../.." as Root
 
-// StatusArea — Shelf status icon cluster (WiFi/Bluetooth/Battery/Volume/Clock)
+// StatusArea — Shelf status icon cluster (WiFi/Bluetooth/Battery/Volume)
 // WiFi: nmcli CLI polling
 // Bluetooth: bluetoothctl CLI polling
 // Battery: Conditional via /sys/class/power_supply/BAT0
 // Volume: Native Pipewire
-// Clock: Timer-driven HH:mm
+// The clock lives in ClockWidget (right corner).
 Item {
     id: root
 
@@ -35,9 +35,6 @@ Item {
     PwObjectTracker {
         objects: [Pipewire.defaultAudioSink]
     }
-
-    // ── Clock ──
-    property string timeText: Qt.formatDateTime(new Date(), "HH:mm")
 
     // ── Icon helpers ──
     function wifiIcon(signal) {
@@ -157,14 +154,7 @@ Item {
         }
     }
 
-    // ── Clock timer (every 30 seconds — close enough for HH:mm accuracy) ──
-    Timer {
-        interval: 30000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: root.timeText = Qt.formatDateTime(new Date(), "HH:mm")
-    }
+    // ── Clock moved to ClockWidget (right corner) ─────────────────
 
     // ── Init: check battery existence ──
     Component.onCompleted: batteryCheckProc.running = true
@@ -233,15 +223,6 @@ Item {
                 font.family: Root.Theme.fontFamily
                 font.pixelSize: 18
                 color: Root.Theme.textPrimary
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            // Clock (HH:mm)
-            Text {
-                text: root.timeText
-                font.family: Root.Theme.fontFamily
-                font.pixelSize: Root.Theme.fontSizeNormal
-                color: Root.Theme.textSecondary
                 verticalAlignment: Text.AlignVCenter
             }
         }

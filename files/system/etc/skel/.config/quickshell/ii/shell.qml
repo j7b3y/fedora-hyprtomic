@@ -1,3 +1,7 @@
+// Platform menus (system tray right-click) only work in QApplication mode:
+// quickshell's StatusNotifierItem.display() requires it.
+//@ pragma UseQApplication
+
 import Quickshell
 import QtQuick
 import Quickshell.Io

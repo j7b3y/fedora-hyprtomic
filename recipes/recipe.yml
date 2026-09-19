@@ -56,6 +56,11 @@ modules:
         - gnome-keyring
         # Qt wayland backend
         - qt5-qtwayland
+        # Qt theming on the host: qt6ct (platform theme) + Kvantum (widget
+        # style) so host Qt apps use the same palette as the GUI container.
+        # QT_QPA_PLATFORMTHEME=qt6ct is set by hyprland.lua.
+        - qt6ct
+        - kvantum
         # Fonts (base set; decoration fonts + IME live in the GUI container)
         - google-noto-sans-cjk-fonts
         - google-noto-color-emoji-fonts

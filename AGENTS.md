@@ -129,6 +129,29 @@ on every shell start, so the whole desktop follows the saved theme:
 Adding a theme means editing `Theme.qml` **and** the `case` block in
 `apply-theme.sh` (the script cannot read QML). Keep the hexes in sync.
 
+Where the theme is consumed:
+
+- **Host + GUI container**: `qt6ct`/`kvantum` are installed on **both** sides
+  (`recipes/recipe.yml`, `files/gui-build/scripts/gui-01-packages.sh`) and
+  `hyprland.lua` exports `QT_QPA_PLATFORMTHEME=qt6ct`. `files/system/etc/environment`
+  is intentionally minimal: the base image's `GTK_THEME=Adwaita:dark` and
+  `QT_STYLE_OVERRIDE=adwaita-dark` are removed because they shadowed the
+  generated palette (QT_STYLE_OVERRIDE beats qt6ct's Kvantum style).
+- **Other distrobox containers**: distrobox bind-mounts the host's
+  `/usr/share/{fonts,icons,themes}` into every container at
+  `/usr/local/share/...`, and `$HOME` is shared. Assets installed only in the
+  GUI container are therefore invisible to the host and to other containers —
+  put shared fonts/themes on the host image, not in the GUI container.
+- **Flatpaks**: only host fonts (`/run/host/fonts`) and per-app `xdg-config`
+  permissions are visible. Firefox has `xdg-config/gtk-3.0:ro`, Chrome does
+  not, and Kvantum/Qt theming cannot be shipped to flatpaks. Keep flatpak
+  expectations low and document deviations instead of chasing parity.
+- **Known upstream issue**: flatpak 1.18.1+ (CVE-2026-34078 hardening) breaks
+  CJK font rendering in Chromium/Gecko flatpaks even though `fc-match` resolves
+  the fonts (`flatpak/flatpak#6800`). Verify with
+  `flatpak run --command=fc-match <app> "sans-serif:lang=ja"` before touching
+  the font pipeline.
+
 ## Build + CI rules
 
 - **Only `main` publishes images.** Feature branches are validated by opening a

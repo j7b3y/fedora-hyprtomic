@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Host-side launcher/manager for the HyprTomic GUI container.
+#
+# The GUI shell (quickshell-based dotfiles) and its GUI helpers live in an Arch
+# distrobox container (ghcr.io/j7b3y/hyprtomic-gui) so they are built against
+# the distro their dotfiles come from. The Hyprland session runs on the host;
+# the container session is started from here.
+#
+# Usage:
+#   hyprtomic-gui-shell              ensure the container, then run the shell session
+#   hyprtomic-gui-shell init         create + initialize if missing
+#   hyprtomic-gui-shell update       recreate from the latest image
+#   hyprtomic-gui-shell reset        same as update, explicit
+#   hyprtomic-gui-shell status       show the container state
+set -uo pipefail
+
+CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
+IMAGE="${HYPRTOMIC_GUI_IMAGE:-ghcr.io/j7b3y/hyprtomic-gui:latest}"
+
+exists() {
+    distrobox list --no-color 2>/dev/null | grep -qw "$CONTAINER"
+}
+
+# Older images exported the container's ghostty to ~/.local/bin. That shim
+# shadows the host ghostty on PATH, so the terminal keybind opened an Arch
+# container shell. Remove it if it is (still) a distrobox wrapper; the
+# container is entered explicitly with `distrobox enter $CONTAINER`.
+remove_stale_ghostty_shim() {
+    local shim="$HOME/.local/bin/ghostty"
+    if [ -f "$shim" ] && grep -q "distrobox" "$shim" 2>/dev/null; then
+        rm -f "$shim"
+    fi
+}
+
+# BlueBuild's post_build wipes /var in the image (ostree assumption), so the
+# standard skeleton and a machine-id are (re)created once inside the container.
+init_container() {
+    distrobox enter "$CONTAINER" -- sudo bash -c '
+        mkdir -p /var/lib /var/cache /var/tmp /var/log /var/opt
+        if [ ! -s /etc/machine-id ]; then
+            cat /proc/sys/kernel/random/uuid | tr -d "-" > /etc/machine-id
+        fi
+    '
+
+    # Expose container-side GUI tools on the host PATH (shims that re-enter the
+    # container) so Hyprland keybinds/scripts can call them transparently.
+    # ghostty is NOT exported: the host has its own ghostty (install-ghostty.sh
+    # via the scottames/ghostty COPR), and a container shim here would shadow it
+    # on PATH and turn Super+Q into an Arch-container shell.
+    distrobox enter "$CONTAINER" -- bash -lc '
+        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
+                   rofi clipse-gui clipse nwg-displays; do
+            [ -x "/usr/bin/$bin" ] || continue
+            distrobox-export --bin "/usr/bin/$bin" \
+                --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
+        done
+    '
+
+    # The shell's python venv lives in the (shared) home and is created once on
+    # first setup.
+    distrobox enter "$CONTAINER" -- bash -lc '
+        venv="$HOME/.local/state/quickshell/.venv"
+        if [ ! -x "$venv/bin/python" ]; then
+            echo "Building the shell python venv (one-time) ..." >&2
+            mkdir -p "$(dirname "$venv")"
+            uv venv --prompt .venv "$venv" -p 3.12
+            uv pip install --python "$venv/bin/python" \
+                -r /usr/share/hyprtomic/uv-requirements.txt
+        fi
+    '
+}
+
+ensure() {
+    if ! exists; then
+        echo "Creating GUI container '$CONTAINER' from $IMAGE ..." >&2
+        # Mount the host's system flatpak exports read-only so the shell's
+        # DesktopEntries / icon resolver see host flatpaks (icons + .desktop).
+        distrobox create --name "$CONTAINER" --image "$IMAGE" -Y --no-entry \
+            --volume /var/lib/flatpak:/var/lib/flatpak:ro || return 1
+        init_container || return 1
+    fi
+}
+
+cmd_update() {
+    if exists; then
+        distrobox rm -f "$CONTAINER" || return 1
+    fi
+    ensure
+}
+
+gui_env=(
+    "HYPRLAND_INSTANCE_SIGNATURE=${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
+    "XDG_CURRENT_DESKTOP=Hyprland"
+    "XDG_SESSION_TYPE=wayland"
+    # Force the Wayland QPA plugin: without a display Qt falls back to xcb and
+    # dies with "no Qt platform plugin could be initialized".
+    "QT_QPA_PLATFORM=wayland"
+    # The shell's DesktopEntries only scans XDG_DATA_DIRS. Point
+    # it at the host flatpak exports (bind-mounted by distrobox) plus the
+    # container's own data dirs, so both host flatpaks and container apps are
+    # listed.
+    "XDG_DATA_DIRS=${HOME}/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share"
+    # quickshell config directory name under ~/.config/quickshell (default: ii).
+    "HYPRTOMIC_QS_CONFIG=${HYPRTOMIC_QS_CONFIG:-ii}"
+)
+
+# BlueZ (bluetoothctl) and NetworkManager (nmcli) are host services on the
+# system D-Bus, but distrobox only shares the user session bus. Point
+# system-bus clients at the host socket mounted by distrobox so the shell's
+# Bluetooth/Network panels talk to the real daemons.
+if [ -S /run/dbus/system_bus_socket ] && [ -z "${DBUS_SYSTEM_BUS_ADDRESS:-}" ]; then
+    gui_env+=("DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host/run/dbus/system_bus_socket")
+fi
+
+# VM (virtio-gpu): Qt's EGL path fails ("egl failed to create dri2 screen"),
+# which makes Qt Quick apps (quickshell, ghostty) die. Force software rendering
+# only when virtio is the ONLY GPU (a passed-through/SR-IOV i915 keeps
+# hardware acceleration even if a virtio display device is also present).
+has_real_gpu=0
+for u in /sys/class/drm/card*/device/uevent; do
+    [ -e "$u" ] || continue
+    grep -qi virtio "$u" || has_real_gpu=1
+done
+if [ "$has_real_gpu" = 0 ] && grep -qi virtio /sys/class/drm/*/device/uevent 2>/dev/null; then
+    gui_env+=("QT_QUICK_BACKEND=software" "LIBGL_ALWAYS_SOFTWARE=1")
+fi
+
+case "${1:-}" in
+    init) ensure ;;
+    update | reset) cmd_update ;;
+    status) distrobox list --no-color | grep -E "NAME|$CONTAINER" || true ;;
+    "" )
+        ensure || exit 1
+        remove_stale_ghostty_shim
+        # Chromium/Electron flatpaks lose the host fonts under flatpak >= 1.18
+        # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
+        # apps must be restarted to pick the fix up.
+        /usr/bin/hyprtomic-flatpak-fonts >/dev/null 2>&1 || true
+        # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
+        # loses it, and QML errors are the usual reason the bar does not appear.
+        log="$HOME/.local/state/hyprtomic/gui-session.log"
+        mkdir -p "$(dirname "$log")"
+        echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
+        exec distrobox enter "$CONTAINER" -- \
+            env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \
+            >>"$log" 2>&1
+        ;;
+    * )
+        # Pass any other arguments straight through to quickshell in the container.
+        ensure || exit 1
+        exec distrobox enter "$CONTAINER" -- \
+            env "${gui_env[@]}" bash -lc 'exec qs -c "$HYPRTOMIC_QS_CONFIG" "$@"' bash "$@"
+        ;;
+esac

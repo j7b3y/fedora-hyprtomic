@@ -1,89 +1,233 @@
-# fedora-hyprtomic &nbsp; [![bluebuild build badge](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml)
+# HyprTomic &nbsp; [![host image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml) [![gui image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml)
 
-See the [BlueBuild docs](https://blue-build.org/how-to/setup/) for quick setup instructions for setting up your own repository based on this template.
+A personal Fedora Atomic desktop image with a split architecture:
 
-After setup, it is recommended you update this README to describe your custom image.
+| Layer | What it is | Built from |
+|---|---|---|
+| **Host** | Fedora Atomic (wayblue base) + Hyprland/SDDM session, system services and CLI tools | `recipes/recipe.yml` → `ghcr.io/j7b3y/fedora-hyprtomic:latest` |
+| **GUI container** | Arch Linux distrobox container with the GUI foundation (quickshell, Qt6) and the GUI apps | `recipes/gui.yml` → `ghcr.io/j7b3y/hyprtomic-gui:latest` |
+| **Dotfiles** | Baked into `/etc/skel`, synced into `$HOME` with a `ujust` recipe | `files/system/etc/skel/**` |
+
+`$HOME` is shared between host and container, so the same dotfiles serve both
+sides. The GUI shell itself (quickshell) runs inside the container; the
+compositor and the system services run on the host.
+
+Session flow:
+
+1. SDDM starts the Hyprland session on the host.
+2. `~/.config/hypr/hyprland.lua` runs `hyprtomic-gui-shell` on `hyprland.start`.
+3. `hyprtomic-gui-shell` creates/updates the `hyprtomic-gui` distrobox container,
+   exports GUI helpers (fuzzel, wlogout, clipse, hypremoji, hyprbind, rofi, …)
+   to `~/.local/bin`, and starts `hyprtomic-gui-session` inside the container.
+4. `quickshell` (config name `ii`) draws the shelf, launcher, control center,
+   notifications, OSD and power menu.
+
+Bridges between host and container:
+
+- Container → host command: `distrobox-host-exec <cmd>` (flatpak launches,
+  power actions, host CLI helpers).
+- Host **system** D-Bus: distrobox only shares the user session bus, so the GUI
+  session sets `DBUS_SYSTEM_BUS_ADDRESS`
+  (`unix:path=/run/host/run/dbus/system_bus_socket`) to reach the host's BlueZ
+  and NetworkManager.
+- Container → host entry point: `distrobox enter hyprtomic-gui`.
+- GUI apps are not installed on the host; run them from the container (or
+  through the exported wrappers).
+
+## What you get
+
+- **Shelf** (bottom bar): launcher button on the left (opens the quickshell
+  launcher), a 1–10 workspace
+  pager with per-workspace app icons in the center, and
+  `[system tray][wifi/bt/battery/volume][clock]` on the right. The clock shows
+  `yyyy-MM-dd HH:mm`.
+- **Control center** (bottom-right hot strip, click or hover; `Super+A`):
+  Wi-Fi, Bluetooth, airplane mode, theme switcher, volume + output device
+  selector, brightness.
+- **Theming**: `apply-theme.sh` keeps Hyprland borders, GTK3/4, Qt (qt6ct +
+  Kvantum), ghostty, rofi and the shell palette in sync. Six md3 themes ship in
+  `Theme.qml`; switching is done from the control center.
+- **Notifications / OSD / power menu** owned by quickshell: volume OSD, volume
+  keys, `Super+Delete` power menu (shutdown / reboot / lock / suspend — power
+  actions are forwarded to the host). Notifications keep an unread history:
+  the shelf's right end has a bell with an unread badge that opens the
+  notification center, and the history is persisted across restarts.
+- **IME + clipboard**: fcitx5 with the Mozkey IbG engine and `clipse` run in the
+  container (`Super+V` clipboard history, `Super+.` emoji picker).
+- **Flatpaks** are managed on the host (system scope). Their desktop entries are
+  visible to the container launchers, and the shell starts them through
+  `distrobox-host-exec flatpak run …` so they use the host's sandbox.
+- **Audio / network / Bluetooth**: PipeWire, NetworkManager and BlueZ run on the
+  host; the container talks to them through the shared session bus / host system
+  bus.
 
 ## Installation
 
-> [!WARNING]  
-> [This is an experimental feature](https://www.fedoraproject.org/wiki/Changes/OstreeNativeContainerStable), try at your own discretion.
+> [!WARNING]
+> [Ostree native containers are experimental](https://www.fedoraproject.org/wiki/Changes/OstreeNativeContainerStable) — use at your own discretion.
 
-To rebase an existing atomic Fedora installation to the latest build:
-
-- First rebase to the unsigned image, to get the proper signing keys and policies installed:
-  ```
-  rpm-ostree rebase ostree-unverified-registry:ghcr.io/j7b3y/fedora-hyprtomic:latest
-  ```
-- Reboot to complete the rebase:
-  ```
-  systemctl reboot
-  ```
-- Then rebase to the signed image, like so:
-  ```
-  rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest
-  ```
-- Reboot again to complete the installation
-  ```
-  systemctl reboot
-  ```
-
-The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipe.yml`, so you won't get accidentally updated to the next major version.
-
-## Post-install (first login)
+To rebase an existing Fedora Atomic installation to the latest build:
 
 ```bash
-ujust setup-dotfiles                  # link baked Hyprland/quickshell/waybar/... configs into ~/.config
-ujust choose-kernel kernel-cachyos    # switch to the CachyOS kernel, then reboot
+rpm-ostree rebase ostree-unverified-registry:ghcr.io/j7b3y/fedora-hyprtomic:latest
+systemctl reboot
+rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest
+systemctl reboot
 ```
 
-Note: the Linux Lite kernel is not available for Fedora Atomic, so `kernel-cachyos` is used as the "latest/optimized kernel" substitute.
-
-GUI apps default to Flatpak (Flathub). The image auto-provisions the standard set:
-
-- **ghostty** (terminal, copr `scottames/ghostty`), **nemo** + extensions (dnf), **firefox / loupe / bitwarden** (system flatpak)
-- **clipryx** (clipboard), **hypr-emoji-picker** (emoji), **snipland** (snipping) — source-built (best-effort, non-fatal)
-- **fcitx5 + mozc** (Japanese input) via native dnf, with IM env + autostart baked into `hyprland.conf`
-
-Manual (not auto-installable):
-- **fcitx5-hazkey** engine: not on Flathub/Fedora. Build from the gist's flatpak manifest if you specifically want hazkey (mozc covers Japanese input meanwhile).
-
-### btrfs compression tuning (optional, run once after install)
-
-Fedora Atomic installs on btrfs with `compress=zstd:1` by default. To move root to zstd:5 — note that since F42 (composefs) **root mount options in /etc/fstab are ignored**; they must go into the kernel arguments ([common issue](https://discussion.fedoraproject.org/t/root-mount-options-are-ignored-in-fedora-atomic-desktops-42-and-later/148562)):
+## First boot
 
 ```bash
-findmnt -no TARGET,OPTIONS / /var /home   # check current state
-sudo rpm-ostree kargs --delete=rootflags=subvol=root --append=rootflags=subvol=root,compress=zstd:5
-sudo sed -i 's/compres…zstd:5/' /etc/fstab && sudo systemctl daemon-reload
-sudo reboot
-# force-compress existing data
-sudo btrfs fi defragment -r -c zstd /var /home
-# verify: sudo dnf install -y btrfs-progs; btrfs filesystem du -s /var | btrfs filesystem show is fine too
+ujust sync-skel-config                # copy /etc/skel into $HOME (skips existing files)
+ujust overwrite=1 sync-skel-config    # replace managed files and prune removed ones, then re-login
 ```
 
-## ISO
-
-Generate an offline installer from the published image (run on Fedora/WSL; builds the ostree payload into Fedora's anaconda media):
+The GUI container is created automatically by `hyprtomic-gui-shell` on the
+first login; it can also be managed explicitly:
 
 ```bash
-sudo bluebuild generate-iso --iso-name hyprtomic.iso -V kinoite image ghcr.io/j7b3y/fedora-hyprtomic:latest
+ujust gui-container-setup             # create + initialize the container
+ujust gui-container-update            # recreate from the latest image
+ujust gui-container-reset             # same as update, explicit
+ujust gui-container-status            # show container state
+hyprtomic-gui-shell status            # same, via the CLI
 ```
 
-- User creation happens **inside the installer** (anaconda shows the User Creation hub) as long as the live media uses a non-GNOME profile. The profile is picked from the *installer* environment's os-release `VARIANT_ID`, which is why the `-V` flag matters:
-  - `-V kinoite` (recommended) or `-V server`: user creation page is shown at install time.
-  - `-V silverblue` / any GNOME-family profile: anaconda intentionally removes the user screens and expects gnome-initial-setup, which this image does not ship — you end up at the SDDM login with no user. This is what bit earlier ISO builds.
-  - Verify in the installer shell (Ctrl+Alt+F2): `/tmp/anaconda.log` should log the detected profile (e.g. `fedora-kinoite`).
-- Do **not** use `--web-ui`: anaconda-webui is experimental in this builder and crashes at startup leaving a gray/blank screen (RHBZ 2308279).
-- The hostname is auto-set once on first boot to `hyprtomic-<machine-id prefix>` (`hyprtomic-hostname.service`), replacing wayblue's `DEFAULT_HOSTNAME`.
-- If the ISO itself boots to a gray screen: switch to a text console with `Ctrl+Alt+F2` to inspect logs, or add `nomodeset` to the kernel line in GRUB (press `e` at the boot menu) to rule out graphics issues.
+Session logs: `~/.local/state/hyprtomic/gui-session.log` (quickshell output) and
+`/run/user/$UID/quickshell/by-id/*/log.qslog` (details).
 
-These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
+## Updating
+
+```bash
+rpm-ostree upgrade && systemctl reboot   # host image
+ujust gui-container-update               # GUI container image (after a new gui build)
+```
+
+Dotfiles only change when the **host image** is updated (they live in
+`/etc/skel`), so after a host upgrade re-run `ujust overwrite=1 sync-skel-config`
+and re-login to pick them up. The theme is re-applied automatically on every
+shell start.
+
+## Configuration
+
+### Hyprland (`~/.config/hypr/`)
+
+| File | Managed? | Purpose |
+|---|---|---|
+| `hyprland.lua` | yes (skel) | Defaults: monitors, gaps, animations, keybinds, window rules, autostart. Do not edit by hand — it is replaced by `overwrite=1`. |
+| `local.conf` | **no** (never shipped) | Machine-specific overrides. Loaded only when present, so it survives every `sync-skel-config`, including `overwrite=1`. |
+| `monitors.lua` / `workspaces.lua` | generated (nwg-displays) | Monitor layout and workspace → output assignments written by the `nwg-displays` GUI. Loaded when present, **before** `local.conf`, so a manual override still wins. Delete them to go back to auto-detection. |
+| `theme.lua` | generated | Border colours written by `apply-theme.sh`; do not edit. |
+| `layouts/quadgrid.lua` | yes (skel) | Custom 2×2 tiling layout; register/apply per monitor via rules. |
+
+`local.conf` is plain Lua, executed by `hyprland.lua` at startup. It can either
+return a table of the supported knobs or call the Hyprland API directly:
+
+```lua
+-- ~/.config/hypr/local.conf
+-- Machine-specific overrides are plain Lua executed by hyprland.lua; the `hl`
+-- API is available, so monitors, window rules and keybinds can be added here.
+-- hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
+-- hl.window_rule({ name = "my-rule", match = { class = "^Steam$" }, float = true })
+-- hl.bind("SUPER + G", hl.dsp.exec_cmd("flatpak run com.spotify.Client"), { desc = "Spotify" })
+```
+
+Keep machine-specific settings out of skel (this is the whole point of
+`local.conf`): the sync recipe prunes anything that the image no longer ships,
+but never touches `local.conf`.
+
+**Monitor arrangement (GUI):** `nwg-displays` ships in the GUI container and is
+exported to the host PATH, so it can be started from the launcher, rofi or a
+terminal. Drag the displays, set mode/scale/rotation and press *Apply* — it
+writes `~/.config/hypr/monitors.lua` (+ `monitors.conf`) and reloads Hyprland.
+The Hyprland config loads `monitors.lua`/`workspaces.lua` when present (before
+`local.conf`), so the layout survives restarts. Delete those files to fall back
+to auto-detection.
+
+### Shell (`~/.config/quickshell/ii/`)
+
+- `Theme.qml` + `current-theme`: the theme table and the saved selection. The
+  control center's theme page writes `current-theme` and runs
+  `scripts/apply-theme.sh <theme>`; the same script runs on every shell start.
+- `scripts/apply-theme.sh` owns every generated file (GTK/Qt/Kvantum/ghostty/
+  rofi/Hyprland borders). Adding a theme means editing `Theme.qml` **and** the
+  `case` block in the script — see `AGENTS.md`.
+- The shell config name can be changed with `HYPRTOMIC_QS_CONFIG` (passed
+  through by `hyprtomic-gui-shell`); the default is `ii`.
+
+### Container / environment overrides
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HYPRTOMIC_GUI_CONTAINER` | `hyprtomic-gui` | distrobox container name |
+| `HYPRTOMIC_GUI_IMAGE` | `ghcr.io/j7b3y/hyprtomic-gui:latest` | container image |
+| `HYPRTOMIC_QS_CONFIG` | `ii` | quickshell config directory name |
+
+## Key bindings
+
+`SUPER` is the main modifier. The full list is available with `Super+/`
+(hyprbind).
+
+| Shortcut | Action |
+|---|---|
+| `Super+Q` / `Super+E` | Ghostty / Nemo |
+| `Super+C` / `Super+B` / `Super+M` | Firefox / Bitwarden / Mission Center (flatpaks) |
+| `Super+X` / `Super+F` | Close window / toggle floating |
+| `Super+Arrow` / `Super+Shift+Arrow` | Focus / move window |
+| `Super+1…0` / `Super+Shift+1…0` | Focus / move window to workspace 1–10 |
+| `Super+Tab`, `Super+[` `]`, `Super+wheel` | Previous / next workspace |
+| `Super+/` | Keybind viewer (hyprbind) |
+| `Super+Alt` (hold Super, tap & release Alt) or 変換 (`Henkan`) | App launcher (quickshell launcher) |
+| `Super+A` | Control center |
+| `Super+Delete` | Power menu |
+| `Super+L` | Lock (hyprlock) |
+| `Super+Escape` | Window switcher (rofi) |
+| `Super+V` / `Super+.` | Clipboard history / emoji picker |
+| `Super+Shift+S` / `Super+Ctrl+Shift+S` | Region screenshot → clipboard + file / file only |
+| `Super+Shift+P` | Colour picker |
+| `XF86Audio*` | Volume, mute, mic mute, media control |
+
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `recipes/recipe.yml` | Host image: packages, os-release rebrand, build scripts, default flatpaks |
+| `recipes/gui.yml` | GUI container image: package layers + session assets |
+| `files/system/**` | Copied verbatim to `/` of the host image (skel dotfiles, systemd units, `hyprtomic-gui-shell`, SDDM assets, ujust recipe) |
+| `files/scripts/**` | Host build-time scripts (referenced by bare name from `recipe.yml`) |
+| `files/gui-build/scripts/gui-*.sh` | GUI container build scripts, one per package layer |
+| `files/gui/**` | Copied verbatim to `/` of the GUI container (session entrypoint, profile snippets) |
+| `AGENTS.md` | Architecture notes, dotfile integration contract, theming pipeline and change rules |
+
+`docs/` and `opencode.json(c)` are intentionally gitignored.
+
+## Known issues / notes
+
+- **Chromium/Electron flatpaks and CJK fonts**: flatpak ≥ 1.18 exposes host fonts
+  to the sandbox only through `/run/host/font-dirs.xml` `<remap-dir>` entries,
+  which reuse the host fontconfig caches (`cache-9`). Chromium and Electron
+  bundle a newer fontconfig (`cache-11`), cannot read those caches and do not
+  rescan the remapped directories, so every host font disappears — Latin still
+  renders (runtime fonts), Japanese becomes tofu. `hyprtomic-flatpak-fonts`
+  writes a per-app `~/.var/app/<app-id>/config/fontconfig/fonts.conf` with
+  plain `<dir>` entries; it runs on every session start and can be re-run with
+  `ujust fix-flatpak-fonts`. Restart the affected app afterwards. Firefox is
+  not affected (it uses the runtime fontconfig).
+- **Theming reach**: host fonts/themes are visible to the containers (distrobox
+  bind-mounts `/usr/share/{fonts,themes,icons}`), but assets installed *only* in
+  the GUI container are not visible to the host or other distroboxes. Flatpaks
+  see host fonts plus their per-app `xdg-config` permissions; Kvantum/Qt theming
+  cannot be shipped to flatpaks. See `AGENTS.md` → "Theming".
+- **`local.conf` is the escape hatch** for anything machine-specific; never rely
+  on hand-editing files that live in `/etc/skel`.
 
 ## Verification
 
-These images are signed with [Sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
+These images are signed with [Sigstore](https://www.sigstore.dev/)'s
+[cosign](https://github.com/sigstore/cosign). Download `cosign.pub` from this
+repo and run:
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/j7b3y/fedora-hyprtomic
+cosign verify --key cosign.pub ghcr.io/j7b3y/hyprtomic-gui
 ```

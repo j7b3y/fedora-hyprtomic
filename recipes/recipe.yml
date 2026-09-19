@@ -24,12 +24,20 @@ modules:
       BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
       DEFAULT_HOSTNAME: "hyprtomic"
 
-  # 2. System-layer packages (Fedora official repos only; no copr)
+  # 2. System-layer packages (Fedora official + one COPR for the Bibata cursor
+  #    theme, which the compositor loads and Fedora does not ship; the GUI
+  #    shell itself lives in the Arch container)
   - type: dnf
+    repos:
+      cleanup: true
+      files:
+        - ririko66z-dots-hyprland.repo # bibata-cursor-theme
     install:
+      skip-unavailable: true
       packages:
-        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base
-        - quickshell
+        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
+        # The GUI shell is NOT installed here: it lives in the Arch GUI container
+        # (ghcr.io/j7b3y/hyprtomic-gui).
         # SDDM astronaut theme deps
         - qt6-qtsvg
         - qt6-qtvirtualkeyboard
@@ -42,24 +50,28 @@ modules:
         - pavucontrol
         # Network
         - NetworkManager
-        - network-manager-applet
-        # Bluetooth (blueman removed; managed via quickshell BluetoothSection)
+        # Bluetooth (managed by the GUI shell)
         - bluez
         # Auth base (polkit + hyprpolkitagent provided by wayblue base)
         - gnome-keyring
-        # Qt / theme
-        - qt5ct
+        # Qt wayland backend
+        - qt5-qtwayland
+        # Qt theming on the host: qt6ct (platform theme) + Kvantum (widget
+        # style) so host Qt apps use the same palette as the GUI container.
+        # QT_QPA_PLATFORMTHEME=qt6ct is set by hyprland.lua.
         - qt6ct
         - kvantum
-        - qt5-qtwayland
-        - papirus-icon-theme
-        # Fonts
-        - google-noto-sans-fonts
+        # Fonts (base set; decoration fonts + IME live in the GUI container)
         - google-noto-sans-cjk-fonts
-        - fontawesome-fonts
-        # Bar / notify / launcher
-        - waybar
-        - dunst
+        - google-noto-color-emoji-fonts
+        - twitter-twemoji-fonts
+        # Icon theme (host GTK apps: nemo etc.; the GUI container ships its own)
+        - papirus-icon-theme
+        # Cursor theme (loaded by the compositor, so it must be on the host)
+        - bibata-cursor-theme
+        # Bar / notifications: provided by the GUI shell in the container
+        # (waybar/dunst are not used). swaybg sets the desktop wallpaper
+        # (hyprland.lua autostart) since the shell has no background module.
         - swaybg
         # Screenshot / clipboard
         - grim
@@ -71,6 +83,7 @@ modules:
         - playerctl
         - libnotify
         - dex-autostart
+        - distrobox # GUI container runtime (hyprtomic-gui-shell / ujust gui-container-*)
         - python3-gobject
         - fastfetch
         # File manager (Fedora official; promoted from user-later to system standard)
@@ -79,20 +92,19 @@ modules:
         - file-roller
         - ffmpegthumbnailer
         - tumbler
-        # IME (native fcitx5; hazkey engine installed via copr; profile enables it)
-        - fcitx5
-        - fcitx5-gtk
-        - fcitx5-qt
-        - fcitx5-configtool
-        # Deps for source-built user tools (clipryx / hypr-emoji-picker / snipland)
+        # IME: managed inside the GUI container (fcitx5 + engine there), so the
+        # input method is available to the container's GUI apps.
+        # Input/automation helpers used by the shell and tools
         - wtype
+        - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)
         - python3-cairo
-        - google-noto-color-emoji-fonts
         # Common dev tools (used across all dev envs)
         - git
         - git-credential-oauth
         - python3-pip
         - android-tools
+        - nvim
+        - python3-neovim
         - zsh
         - zsh-autosuggestions
         - zsh-syntax-highlighting
@@ -106,22 +118,21 @@ modules:
   # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
-      - install-hyprbind.sh
       - install-ghostty.sh
-      - install-nwg-dock.sh
       - install-sddm-theme.sh
-      - install-catppuccin-theme.sh
-      - install-clipryx.sh
-      - install-hypr-emoji-picker.sh
-      - install-snipland.sh
-      - install-hazkey.sh
       - finalize.sh
 
-  # 5. Enable firstboot services (unique hostname per machine)
+  # 5. Enable firstboot/session services (hostname, user groups, zsh default;
+  #    ydotool daemon as a user unit, mirroring upstream)
   - type: systemd
     system:
       enabled:
         - hyprtomic-hostname.service
+        - hyprtomic-groups.service
+        - hyprtomic-zsh-default.service
+    user:
+      enabled:
+        - ydotool.service
 
   # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
@@ -132,5 +143,6 @@ modules:
           - org.mozilla.firefox
           - org.gnome.Loupe
           - com.bitwarden.desktop
+          - io.missioncenter.MissionCenter # Super+M system monitor
 
   - type: signing # proper policy & signing for signed images

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ghostty
+Comment=A terminal emulator (host session)
+# Override the container's ghostty entry: the launcher and rofi should open the
+# host terminal, matching the Super+Q keybind (the host ghostty is the standard
+# terminal; the container's copy is only used for `distrobox enter` debugging).
+# /usr/local/share/applications takes priority over /usr/share/applications.
+TryExec=distrobox-host-exec
+Exec=distrobox-host-exec ghostty
+Icon=com.mitchellh.ghostty
+Categories=System;TerminalEmulator;
+Keywords=terminal;tty;pty;
+StartupNotify=true
+StartupWMClass=com.mitchellh.ghostty

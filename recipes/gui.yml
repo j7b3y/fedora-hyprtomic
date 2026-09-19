@@ -1,0 +1,65 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+name: hyprtomic-gui
+description: Arch-based HyprTomic GUI container (GUI foundation/apps) run via distrobox
+
+# Plain (non-bootable) Arch container consumed by distrobox on the HyprTomic
+# host. BlueBuild's non-Fedora support is experimental and targets bootc images;
+# this recipe intentionally uses only base-agnostic modules.
+#
+# The package steps use `containerfile` snippets (COPY+RUN of a single script)
+# rather than the `script` module: the latter bind-mounts the whole repo files/
+# tree, so any dotfile/script edit invalidated every layer including the
+# expensive quickshell compile. COPY'ing only the relevant script keeps each
+# package layer cached independently.
+base-image: archlinux
+image-version: latest
+# Do not install the BlueBuild CLI into the image (it assumes a bootable Fedora
+# host and is not needed inside the GUI container).
+blue-build-tag: none
+
+modules:
+  # 1. quickshell-git alone: the expensive C++/Qt compile, cached on its own.
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-02-quickshell.sh /tmp/gui-02-quickshell.sh
+        RUN bash /tmp/gui-02-quickshell.sh
+
+  # 2. Official Arch packages (base tooling, GUI apps, Qt6 stack, fonts, IME).
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-01-packages.sh /tmp/gui-01-packages.sh
+        RUN bash /tmp/gui-01-packages.sh
+
+  # 3. Remaining AUR packages (Base Dotfiles tools, themes, fonts) + hyprbind.
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-03-aur.sh /tmp/gui-03-aur.sh
+        RUN bash /tmp/gui-03-aur.sh
+
+  # 3b. Google Sans Flex (optional UI font used by the dotfiles), extracted from
+  #     the upstream Fedora RPM since it is not packaged for Arch/AUR.
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-04-fonts.sh /tmp/gui-04-fonts.sh
+        RUN bash /tmp/gui-04-fonts.sh
+
+  # 4. Container-side assets: the GUI session entrypoint and the python
+  #    requirements used to build the shell venv in $HOME.
+  - type: files
+    files:
+      - source: gui
+        destination: /
+
+  # 5. Image tidy-up.
+  - type: containerfile
+    snippets:
+      - |
+        COPY files/gui-build/scripts/gui-99-finalize.sh /tmp/gui-99-finalize.sh
+        RUN bash /tmp/gui-99-finalize.sh
+
+  - type: signing

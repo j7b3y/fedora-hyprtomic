@@ -53,15 +53,11 @@ Scope {
             id: shelfBackground
             anchors.fill: parent
             color: Root.Theme.shelfBg
-            radius: Root.Theme.radiusLarge
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: Root.Theme.radiusLarge
-                color: parent.color
-            }
+            // Round only the top corners. Squaring the bottom with an overlay
+            // rectangle used to stack two semi-transparent layers, which made
+            // the bottom 14px (~1/3 of the bar) visibly darker.
+            topLeftRadius: Root.Theme.radiusLarge
+            topRightRadius: Root.Theme.radiusLarge
 
             // ── Bottom-right hot strip (quick settings) ────────────
             // Thin strip along the shelf's bottom-right edge: hovering opens
@@ -89,10 +85,11 @@ Scope {
                 }
             }
 
+            // Left cluster: launcher + desktop pager, left-aligned.
             RowLayout {
-                anchors.fill: parent
+                anchors.left: parent.left
                 anchors.leftMargin: Root.Theme.padding
-                anchors.rightMargin: Root.Theme.padding
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: Root.Theme.paddingSmall
 
                 // App launcher (quickshell launcher) — leftmost item.
@@ -100,15 +97,25 @@ Scope {
                     Layout.alignment: Qt.AlignVCenter
                 }
 
-                Item { Layout.fillWidth: true }
-
                 // Desktop pager 1..10 with the app icon of each occupied
                 // workspace (replaces the old pinned-app shortcuts).
                 WorkspaceSwitcher {
                     Layout.alignment: Qt.AlignVCenter
                 }
+            }
 
-                Item { Layout.fillWidth: true }
+            // Clock centred on the bar (independent of the cluster widths).
+            ClockWidget {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Right cluster: resident apps + status icons.
+            RowLayout {
+                anchors.right: parent.right
+                anchors.rightMargin: Root.Theme.padding
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Root.Theme.paddingSmall
 
                 // Resident apps (system tray) sit before the status cluster.
                 Row {
@@ -150,11 +157,6 @@ Scope {
 
                 // Network / Bluetooth / Battery / Volume.
                 StatusArea {
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
-                // Clock pinned to the far right corner.
-                ClockWidget {
                     Layout.alignment: Qt.AlignVCenter
                 }
             }

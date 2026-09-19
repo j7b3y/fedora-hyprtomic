@@ -6,8 +6,8 @@
 --
 -- 固有設定 (machine-specific): このファイルは既定動作 (モニタ自動検出など) を
 -- そのまま提供する。実機固有の設定が必要な場合は ~/.config/hypr/local.conf を用意する。
---   例) return { monitor_primary = "DP-1" }  → テーブルを返して変数を上書き
---       hl.monitor({ output = "HDMI-A-1", ... }) / hl.window_rule(...) / hl.bind(...)
+--   例) hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
+--       hl.window_rule(...) / hl.bind(...)
 --       → ファイル内で直接実行してモニタ / ワークスペースルール / キーバインドを追加
 -- local.conf は /etc/skel に同梱しない (overwrite=1 同期で上書きされないよう)。
 
@@ -49,17 +49,12 @@ if _exists(_HOME .. "/.config/hypr/workspaces.lua") then
     end
 end
 
-local localCfg = {}
 if _exists(_HOME .. "/.config/hypr/local.conf") then
-    local ok, cfg = pcall(dofile, _HOME .. "/.config/hypr/local.conf")
-    if ok and type(cfg) == "table" then
-        localCfg = cfg
-    else
+    local ok = pcall(dofile, _HOME .. "/.config/hypr/local.conf")
+    if not ok then
         hl.notification.create({ text = "hypr: ~/.config/hypr/local.conf failed to load; using defaults", duration = 5000 })
     end
 end
--- Empty = no monitor pinning (the pfmon/btop rule stays on the current monitor).
-local monitorPrimary = localCfg.monitor_primary or ""
 
 -- カスタムレイアウト登録 (適用は local.conf の workspace_rule で指定。
 -- ~/.config/hypr/layouts が無い場合は skip)
@@ -275,8 +270,7 @@ hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })
 hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("flatpak run org.mozilla.firefox"), { desc = "Firefox を開く" })
--- pfmon の代わりに btop を GUI コンテナ内で起動
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("ghostty --class=local.pfmon -e distrobox enter hyprtomic-gui -- btop"), { desc = "btop パフォーマンスモニタ" })
+hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("flatpak run io.missioncenter.MissionCenter"), { desc = "Mission Center (システムモニタ)" })
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { desc = "Bitwarden を開く" })
 
 -- Focus
@@ -449,22 +443,6 @@ hl.window_rule({
     center  = true,
     opacity = 0.85,
 })
-
-local pfmonRule = {
-    name        = "float-pfmon",
-    match       = { class = "^local\\.pfmon$" },
-    float       = true,
-    size        = "1360 765",
-    center      = true,
-    no_anim     = true,
-    border_size = 1,
-    rounding    = 6,
-}
--- Pin the monitor only when local.conf sets monitor_primary (default: auto).
-if monitorPrimary ~= "" then
-    pfmonRule.monitor = monitorPrimary
-end
-hl.window_rule(pfmonRule)
 
 hl.window_rule({
     name    = "float-hyprbind",

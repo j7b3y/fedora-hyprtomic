@@ -143,5 +143,6 @@ modules:
           - org.mozilla.firefox
           - org.gnome.Loupe
           - com.bitwarden.desktop
+          - io.missioncenter.MissionCenter # Super+M system monitor
 
   - type: signing # proper policy & signing for signed images

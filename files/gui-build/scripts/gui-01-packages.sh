@@ -10,7 +10,7 @@ pacman -Syu --noconfirm
 PACMAN_PKGS=(
   # toolchain (AUR builds) + general CLI
   base-devel git go
-  fish eza starship btop fastfetch jq go-yq ripgrep wget rsync unzip bc uv
+  fish eza starship fastfetch jq go-yq ripgrep wget rsync unzip bc uv
   python-pip python-gobject python-cairo gtk3 # gtk3: resolve-icons.py (PyGObject Gtk)
   # terminal (container side; the host has its own ghostty from
   # install-ghostty.sh, so this one stays inside the container)

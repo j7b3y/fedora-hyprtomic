@@ -123,20 +123,11 @@ return a table of the supported knobs or call the Hyprland API directly:
 
 ```lua
 -- ~/.config/hypr/local.conf
--- Supported knobs are returned as a table (currently: monitor_primary).
-local cfg = {
-    -- Pin the btop/pfmon float rule to this monitor (default: auto-detect)
-    monitor_primary = "DP-1",
-}
-
--- Arbitrary additions can also be executed directly: the `hl` API is
--- available while local.conf runs, so extra monitors, window rules and
--- keybinds can be appended here.
--- hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto", scale = 1.0 })
+-- Machine-specific overrides are plain Lua executed by hyprland.lua; the `hl`
+-- API is available, so monitors, window rules and keybinds can be added here.
+-- hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
 -- hl.window_rule({ name = "my-rule", match = { class = "^Steam$" }, float = true })
 -- hl.bind("SUPER + G", hl.dsp.exec_cmd("flatpak run com.spotify.Client"), { desc = "Spotify" })
-
-return cfg
 ```
 
 Keep machine-specific settings out of skel (this is the whole point of
@@ -178,7 +169,7 @@ to auto-detection.
 | Shortcut | Action |
 |---|---|
 | `Super+Q` / `Super+E` | Ghostty / Nemo |
-| `Super+C` / `Super+B` | Firefox / Bitwarden (flatpaks) |
+| `Super+C` / `Super+B` / `Super+M` | Firefox / Bitwarden / Mission Center (flatpaks) |
 | `Super+X` / `Super+F` | Close window / toggle floating |
 | `Super+Arrow` / `Super+Shift+Arrow` | Focus / move window |
 | `Super+1…0` / `Super+Shift+1…0` | Focus / move window to workspace 1–10 |

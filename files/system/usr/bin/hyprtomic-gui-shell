@@ -49,7 +49,7 @@ init_container() {
     # on PATH and turn Super+Q into an Arch-container shell.
     distrobox enter "$CONTAINER" -- bash -lc '
         for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
-                   rofi clipse-gui clipse; do
+                   rofi clipse-gui clipse nwg-displays; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
@@ -133,6 +133,10 @@ case "${1:-}" in
     "" )
         ensure || exit 1
         remove_stale_ghostty_shim
+        # Chromium/Electron flatpaks lose the host fonts under flatpak >= 1.18
+        # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
+        # apps must be restarted to pick the fix up.
+        /usr/bin/hyprtomic-flatpak-fonts >/dev/null 2>&1 || true
         # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
         # loses it, and QML errors are the usual reason the bar does not appear.
         log="$HOME/.local/state/hyprtomic/gui-session.log"

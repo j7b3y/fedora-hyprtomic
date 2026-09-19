@@ -114,6 +114,7 @@ shell start.
 |---|---|---|
 | `hyprland.lua` | yes (skel) | Defaults: monitors, gaps, animations, keybinds, window rules, autostart. Do not edit by hand — it is replaced by `overwrite=1`. |
 | `local.conf` | **no** (never shipped) | Machine-specific overrides. Loaded only when present, so it survives every `sync-skel-config`, including `overwrite=1`. |
+| `monitors.lua` / `workspaces.lua` | generated (nwg-displays) | Monitor layout and workspace → output assignments written by the `nwg-displays` GUI. Loaded when present, **before** `local.conf`, so a manual override still wins. Delete them to go back to auto-detection. |
 | `theme.lua` | generated | Border colours written by `apply-theme.sh`; do not edit. |
 | `layouts/quadgrid.lua` | yes (skel) | Custom 2×2 tiling layout; register/apply per monitor via rules. |
 
@@ -141,6 +142,14 @@ return cfg
 Keep machine-specific settings out of skel (this is the whole point of
 `local.conf`): the sync recipe prunes anything that the image no longer ships,
 but never touches `local.conf`.
+
+**Monitor arrangement (GUI):** `nwg-displays` ships in the GUI container and is
+exported to the host PATH, so it can be started from the launcher, rofi or a
+terminal. Drag the displays, set mode/scale/rotation and press *Apply* — it
+writes `~/.config/hypr/monitors.lua` (+ `monitors.conf`) and reloads Hyprland.
+The Hyprland config loads `monitors.lua`/`workspaces.lua` when present (before
+`local.conf`), so the layout survives restarts. Delete those files to fall back
+to auto-detection.
 
 ### Shell (`~/.config/quickshell/ii/`)
 
@@ -201,11 +210,16 @@ but never touches `local.conf`.
 
 ## Known issues / notes
 
-- **Flatpak browsers and CJK**: flatpak ≥ 1.18.1 broke CJK font rendering in
-  Chromium/Gecko sandboxes (upstream
-  [flatpak#6800](https://github.com/flatpak/flatpak/issues/6800)) even though the
-  fonts are exposed and `fc-match` resolves them. Fix comes from a flatpak
-  update; non-browser flatpaks are unaffected.
+- **Chromium/Electron flatpaks and CJK fonts**: flatpak ≥ 1.18 exposes host fonts
+  to the sandbox only through `/run/host/font-dirs.xml` `<remap-dir>` entries,
+  which reuse the host fontconfig caches (`cache-9`). Chromium and Electron
+  bundle a newer fontconfig (`cache-11`), cannot read those caches and do not
+  rescan the remapped directories, so every host font disappears — Latin still
+  renders (runtime fonts), Japanese becomes tofu. `hyprtomic-flatpak-fonts`
+  writes a per-app `~/.var/app/<app-id>/config/fontconfig/fonts.conf` with
+  plain `<dir>` entries; it runs on every session start and can be re-run with
+  `ujust fix-flatpak-fonts`. Restart the affected app afterwards. Firefox is
+  not affected (it uses the runtime fontconfig).
 - **Theming reach**: host fonts/themes are visible to the containers (distrobox
   bind-mounts `/usr/share/{fonts,themes,icons}`), but assets installed *only* in
   the GUI container are not visible to the host or other distroboxes. Flatpaks

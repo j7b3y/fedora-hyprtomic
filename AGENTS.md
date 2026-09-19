@@ -97,7 +97,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 
 | Expectation | Detail |
 |---|---|
-| Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel). |
+| Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel). The GUI container's `nwg-displays` writes `monitors.lua`/`workspaces.lua`; `hyprland.lua` requires them when present (before `local.conf`, so manual overrides win). |
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
 | Terminal | The host ships `ghostty` (copr `scottames/ghostty`); its config falls back to a host CJK mono font (HackGen ships in the container only). The container keeps its own ghostty for shell actions. |
 | Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. The shelf's left button and the Henkan key open the quickshell launcher; `rofi` (container, exported) remains for the `Super+Escape` window switcher. |
@@ -151,11 +151,15 @@ Where the theme is consumed:
   permissions are visible. Firefox has `xdg-config/gtk-3.0:ro`, Chrome does
   not, and Kvantum/Qt theming cannot be shipped to flatpaks. Keep flatpak
   expectations low and document deviations instead of chasing parity.
-- **Known upstream issue**: flatpak 1.18.1+ (CVE-2026-34078 hardening) breaks
-  CJK font rendering in Chromium/Gecko flatpaks even though `fc-match` resolves
-  the fonts (`flatpak/flatpak#6800`). Verify with
-  `flatpak run --command=fc-match <app> "sans-serif:lang=ja"` before touching
-  the font pipeline.
+- **Known upstream issue**: flatpak ≥ 1.18 exposes host fonts only through
+  `<remap-dir>` entries that point at the host fontconfig caches (`cache-9`).
+  Chromium/Electron bundle a newer fontconfig (`cache-11`), cannot read those
+  caches and do not rescan, so all host fonts disappear for them (Japanese
+  renders as tofu, Latin still works because the runtime ships Latin fonts).
+  `hyprtomic-flatpak-fonts` fixes it per app by re-registering plain
+  `/run/host/fonts` dirs in the app's own fontconfig; it runs at session start
+  and via `ujust fix-flatpak-fonts`. Firefox uses the runtime fontconfig and is
+  unaffected.
 
 ## Build + CI rules
 

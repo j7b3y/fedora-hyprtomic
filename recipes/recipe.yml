@@ -103,6 +103,8 @@ modules:
         - git-credential-oauth
         - python3-pip
         - android-tools
+        - nvim
+        - python3-neovim
         - zsh
         - zsh-autosuggestions
         - zsh-syntax-highlighting

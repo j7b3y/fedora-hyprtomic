@@ -151,12 +151,14 @@ Item {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Hyprland.dispatch("workspace " + cell.wsId)
+                    // This host runs the Lua-enabled Hyprland: IPC dispatchers
+                    // are Lua expressions, not the classic "workspace N" form.
+                    onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + cell.wsId + " })")
                     onWheel: (event) => {
                         if (event.angleDelta.y > 0)
-                            Hyprland.dispatch("workspace e-1");
+                            Hyprland.dispatch("hl.dsp.focus({ workspace = \"e-1\" })");
                         else if (event.angleDelta.y < 0)
-                            Hyprland.dispatch("workspace e+1");
+                            Hyprland.dispatch("hl.dsp.focus({ workspace = \"e+1\" })");
                     }
                 }
             }

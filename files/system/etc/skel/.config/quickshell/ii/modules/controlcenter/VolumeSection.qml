@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Services.Pipewire
@@ -19,6 +21,36 @@ Item {
     readonly property string sinkName: audio && audio.description ? audio.description : "Audio Output"
     readonly property int volumePercent: Math.round(currentVolume * 100)
 
+    // ── Output device selector ─────────────────────────────────────
+    property bool deviceListOpen: false
+
+    // Every output node (hardware and virtual sinks), streams excluded.
+    readonly property var sinkNodes: {
+        const list = Pipewire.nodes.values;
+        const sinks = [];
+        for (let i = 0; i < list.length; ++i) {
+            const node = list[i];
+            if (node.isSink && !node.isStream)
+                sinks.push(node);
+        }
+        return sinks;
+    }
+
+    function isCurrentSink(node) {
+        const preferred = Pipewire.preferredDefaultAudioSink;
+        if (preferred)
+            return node === preferred;
+        return node === Pipewire.defaultAudioSink;
+    }
+
+    function selectSink(node) {
+        if (!node)
+            return;
+        Pipewire.preferredDefaultAudioSink = node;
+        root.deviceListOpen = false;
+    }
+
+    // ── Volume control ─────────────────────────────────────────────
     function setVolume(value) {
         var clamped = Math.min(Math.max(value, 0.0), 1.0);
         if (audio && audio.audio)
@@ -44,20 +76,123 @@ Item {
         anchors.right: parent.right
         spacing: Root.Theme.spacingSmall
 
-        // Sink name
-        Text {
-            text: root.sinkName
-            font.family: Root.Theme.fontFamily
-            font.pixelSize: Root.Theme.fontSizeSmall
-            color: Root.Theme.textSecondary
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-        }
-
-        // Pill track
+        // Sink selector button — opens the output device list.
         Rectangle {
             Layout.fillWidth: true
-            height: Root.Theme.sliderHeight
+            implicitHeight: 30
+            radius: Root.Theme.radiusSmall
+            color: sinkButtonArea.containsMouse ? Root.Theme.surfaceContainerHigh : "transparent"
+
+            Behavior on color { ColorAnimation { duration: Root.Theme.animDurationFast } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                spacing: 8
+
+                Text {
+                    text: root.volumeIcon(root.currentVolume, root.currentMuted)
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeLarge
+                    color: Root.Theme.textSecondary
+                }
+
+                Text {
+                    text: root.sinkName
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textSecondary
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: root.deviceListOpen ? "▴" : "▾"
+                    font.family: Root.Theme.fontFamily
+                    font.pixelSize: Root.Theme.fontSizeSmall
+                    color: Root.Theme.textDisabled
+                }
+            }
+
+            MouseArea {
+                id: sinkButtonArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.deviceListOpen = !root.deviceListOpen
+            }
+        }
+
+        // Output device list.
+        ColumnLayout {
+            visible: root.deviceListOpen
+            Layout.fillWidth: true
+            spacing: 4
+
+            Repeater {
+                model: root.sinkNodes
+
+                delegate: Rectangle {
+                    id: deviceRow
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    implicitHeight: 38
+                    radius: Root.Theme.radiusSmall
+                    color: root.isCurrentSink(deviceRow.modelData)
+                        ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.18)
+                        : (deviceRowArea.containsMouse ? Root.Theme.surfaceContainerHigh : Root.Theme.surfaceContainer)
+                    border.width: 1
+                    border.color: root.isCurrentSink(deviceRow.modelData)
+                        ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.5)
+                        : "transparent"
+
+                    Behavior on color { ColorAnimation { duration: Root.Theme.animDurationFast } }
+
+                    MouseArea {
+                        id: deviceRowArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.selectSink(deviceRow.modelData)
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        Text {
+                            text: deviceRow.modelData.description && deviceRow.modelData.description !== ""
+                                ? deviceRow.modelData.description
+                                : deviceRow.modelData.name
+                            font.family: Root.Theme.fontFamily
+                            font.pixelSize: Root.Theme.fontSizeSmall
+                            color: root.isCurrentSink(deviceRow.modelData)
+                                ? Root.Theme.textPrimary
+                                : Root.Theme.textSecondary
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        Text {
+                            visible: root.isCurrentSink(deviceRow.modelData)
+                            text: "✓"
+                            font.family: Root.Theme.fontFamily
+                            font.pixelSize: Root.Theme.fontSizeNormal
+                            color: Root.Theme.primary
+                        }
+                    }
+                }
+            }
+        }
+
+        // Volume slider
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Root.Theme.sliderHeight
             radius: Root.Theme.sliderHeight / 2
             color: Root.Theme.sliderTrack
             clip: true
@@ -113,6 +248,5 @@ Item {
                 }
             }
         }
-
     }
 }

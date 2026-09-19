@@ -88,7 +88,7 @@ Scope {
             // Left cluster: launcher + desktop pager, left-aligned.
             RowLayout {
                 anchors.left: parent.left
-                anchors.leftMargin: Root.Theme.padding
+                anchors.leftMargin: Root.Theme.paddingSmall
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Root.Theme.paddingSmall
 

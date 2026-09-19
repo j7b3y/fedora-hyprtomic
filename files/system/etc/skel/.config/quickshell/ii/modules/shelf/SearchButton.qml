@@ -29,9 +29,10 @@ Item {
 
         Text {
             anchors.centerIn: parent
-            text: "\uf002"
+            // Nerd Font MDI "apps" (󰀻) — reads as an app drawer rather than search.
+            text: "\uf003b"
             font.family: Root.Theme.fontFamily
-            font.pixelSize: 18
+            font.pixelSize: 20
             color: Root.Theme.textPrimary
         }
     }

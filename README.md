@@ -36,7 +36,8 @@ Bridges between host and container:
 
 ## What you get
 
-- **Shelf** (bottom bar): rofi launcher button on the left, a 1–10 workspace
+- **Shelf** (bottom bar): launcher button on the left (opens the quickshell
+  launcher), a 1–10 workspace
   pager with per-workspace app icons in the center, and
   `[system tray][wifi/bt/battery/volume][clock]` on the right. The clock shows
   `yyyy-MM-dd HH:mm`.

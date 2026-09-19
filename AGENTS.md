@@ -100,7 +100,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 | Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel). |
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
 | Terminal | The host ships `ghostty` (copr `scottames/ghostty`); its config falls back to a host CJK mono font (HackGen ships in the container only). The container keeps its own ghostty for shell actions. |
-| Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. `rofi` runs in the container (exported to the host) for the shelf search button + window switcher. |
+| Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. The shelf's left button and the Henkan key open the quickshell launcher; `rofi` (container, exported) remains for the `Super+Escape` window switcher. |
 | Clipboard / IME | `clipse` + `clipse-gui` (container AUR): the daemon is started by `hyprtomic-gui-session`, `Super+V` opens the GUI (exported). fcitx5 + mozkey-ibg-bin live in the container; the host env exports `GTK_IM_MODULE` / `QT_IM_MODULE` / `XMODIFIERS`. |
 | GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Papirus-Dark icons + Bibata-Modern-Classic cursor (baked into the dconf db). |
 | Python deps | The shell venv is built from `files/gui/usr/share/hyprtomic/uv-requirements.txt` (installed into the container at `/usr/share/hyprtomic/`, currently empty; `resolve-icons.py` needs only the container's python-gobject + gtk3). |
@@ -231,7 +231,7 @@ End-to-end: on a test machine, update the host image, reboot, run
   powermenu / OSD. Quick settings (control center) open from the shelf's
   bottom-right cluster (click) or its thin bottom-right hot strip (hover), from
   `Super+A`, or via `qs -c ii ipc call controlcenter toggle`.
-- Shelf layout: rofi launcher button on the left, a 1..10 workspace pager with
+- Shelf layout: launcher button on the left (quickshell launcher), a 1..10 workspace pager with
   per-workspace app icons in the center, and `[system tray][wifi/bt/battery/
   volume][clock]` on the right — the clock shows `yyyy-MM-dd HH:mm`. System
   tray right-click menus need `//@ pragma UseQApplication` in `shell.qml`.

@@ -2,6 +2,9 @@ import QtQuick
 import Quickshell.Io
 import "../.." as Root
 
+// Launcher button — opens the quickshell launcher (the categorised app grid
+// in modules/launcher). The IPC toggle also closes it, so the button works as
+// a toggle while the launcher is open.
 Item {
     width: 40
     height: 40
@@ -38,11 +41,11 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: rofiProc.startDetached()
+        onClicked: launcherProc.startDetached()
     }
 
     Process {
-        id: rofiProc
-        command: ["rofi", "-show", "drun"]
+        id: launcherProc
+        command: ["qs", "-c", "ii", "ipc", "call", "launcher", "toggle"]
     }
 }

@@ -9,9 +9,27 @@ Scope {
     id: launcher
 
     property bool panelVisible: false
-    property bool _showing: false
+    // The PanelWindow is created once and kept for the shell lifetime; only
+    // its visibility and the inner panel position change on toggle.
+    property bool _windowVisible: false
     property bool _panelOpen: false
     property string searchText: ""
+
+    // Give the surface one frame to settle before sliding in; hide the window
+    // only after the slide-out finished.
+    Timer {
+        id: openDelayTimer
+        interval: 16
+        repeat: false
+        onTriggered: if (launcher.panelVisible) launcher._panelOpen = true
+    }
+
+    Timer {
+        id: closeTimer
+        interval: 240
+        repeat: false
+        onTriggered: if (!launcher.panelVisible) launcher._windowVisible = false
+    }
 
     // ── Category filter ──────────────────────────────────────────
     property string selectedCategory: "All Applications"
@@ -46,12 +64,10 @@ Scope {
         "Utilities": ["Utility", "Accessibility", "Archiving", "Calculator", "Clock", "Compression", "Documentation", "TextEditor", "TextTools"]
     })
 
-    // Assign each app to exactly one display category.
-    // Flatpak and Wine get dedicated categories; others follow plasma-desktop.
+    // Assign each app to exactly one functional category.
+    // Flatpak / Wine are launch-source filters: they are matched separately in
+    // appMatchesCategory so a flatpak app still shows up under Internet etc.
     function appCategory(entry) {
-        if (isFlatpak(entry)) return "Flatpak";
-        if (isWine(entry)) return "Wine";
-
         var entryCats = entry.categories || [];
         for (var cat in categoryMap) {
             var targets = categoryMap[cat];
@@ -65,6 +81,9 @@ Scope {
 
     function appMatchesCategory(entry, cat) {
         if (cat === "All Applications") return true;
+        if (cat === "Flatpak") return isFlatpak(entry);
+        if (cat === "Wine") return isWine(entry);
+        if (cat === "Lost & Found") return appCategory(entry) === "Lost & Found";
         return appCategory(entry) === cat;
     }
 
@@ -412,14 +431,20 @@ Scope {
 
     onPanelVisibleChanged: {
         if (panelVisible) {
-            _showing = true;
+            closeTimer.stop();
+            _windowVisible = true;
+            // Start from the hidden position and slide in on the next frame.
+            _panelOpen = false;
+            openDelayTimer.restart();
             searchText = "";
             gridFocused = false;
             // Default selection: first recent app (or first grid app if no recent)
             kbSection = recentApps.length > 0 ? 0 : 1;
             kbIndex = 0;
         } else {
+            openDelayTimer.stop();
             _panelOpen = false;
+            closeTimer.restart();
         }
     }
 
@@ -433,12 +458,14 @@ Scope {
     }
 
     // ── Overlay window ───────────────────────────────────────────
+    // The window is created once and kept for the shell lifetime; only its
+    // visibility and the inner panel position change on toggle.
     Loader {
-        active: launcher._showing
+        active: true
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            visible: true
+            visible: launcher._windowVisible
 
             anchors {
                 top: true
@@ -452,15 +479,18 @@ Scope {
 
             WlrLayershell.namespace: "quickshell:launcher"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+            WlrLayershell.keyboardFocus: launcher._panelOpen
+                ? WlrKeyboardFocus.Exclusive
+                : WlrKeyboardFocus.None
 
-            Component.onCompleted: openDelayTimer.start()
+            // Focus the search input every time the launcher becomes visible.
+            onVisibleChanged: if (visible) searchFocusTimer.restart()
 
             Timer {
-                id: openDelayTimer
-                interval: 16
+                id: searchFocusTimer
+                interval: 50
                 repeat: false
-                onTriggered: if (launcher.panelVisible) launcher._panelOpen = true
+                onTriggered: searchInput.forceActiveFocus()
             }
 
             Shortcut {
@@ -499,66 +529,19 @@ Scope {
                     anchors.left: parent.left
                     anchors.leftMargin: 12
 
-                    states: [
-                        State {
-                            name: "visible"
-                            when: launcher._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panelClip.height - panel.height - 8
-                                opacity: 1
-                            }
-                        },
-                        State {
-                            name: "hidden"
-                            when: !launcher._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panelClip.height + 20
-                                opacity: 0
-                            }
-                        }
-                    ]
+                    // Slide in from below the clip; a direct binding + Behavior
+                    // keeps the position correct on the very first frame.
+                    y: launcher._panelOpen
+                        ? panelClip.height - height - 8
+                        : panelClip.height + 20
+                    opacity: launcher._panelOpen ? 1 : 0
 
-                    transitions: [
-                        Transition {
-                            from: "hidden"
-                            to: "visible"
-                            ParallelAnimation {
-                                NumberAnimation {
-                                    property: "y"
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
-                                }
-                                NumberAnimation {
-                                    property: "opacity"
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                        },
-                        Transition {
-                            from: "visible"
-                            to: "hidden"
-                            SequentialAnimation {
-                                ParallelAnimation {
-                                    NumberAnimation {
-                                        property: "y"
-                                        duration: 200
-                                        easing.type: Easing.InCubic
-                                    }
-                                    NumberAnimation {
-                                        property: "opacity"
-                                        duration: 200
-                                        easing.type: Easing.InCubic
-                                    }
-                                }
-                                ScriptAction {
-                                    script: launcher._showing = false
-                                }
-                            }
-                        }
-                    ]
+                    Behavior on y {
+                        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    }
 
                     radius: 28
                     color: Qt.rgba(Root.Theme.panelBg.r, Root.Theme.panelBg.g, Root.Theme.panelBg.b, 0.78)
@@ -627,15 +610,8 @@ Scope {
                                         }
                                     }
 
-                                    // Auto-focus when component loads
-                                    Component.onCompleted: focusTimer.start()
-
-                                    Timer {
-                                        id: focusTimer
-                                        interval: 50
-                                        repeat: false
-                                        onTriggered: searchInput.forceActiveFocus()
-                                    }
+                                    // Focus is handled by the window-level
+                                    // searchFocusTimer (restarted on show).
 
                                     Text {
                                         anchors.fill: parent
@@ -734,6 +710,8 @@ Scope {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
 
+                            readonly property real gridCellHeight: 126
+
                             // Scroll to keep keyboard-selected item visible
                             function scrollToSelected() {
                                 var recentH = recentSection.visible
@@ -742,23 +720,28 @@ Scope {
                                 var targetY, itemH;
                                 if (launcher.kbSection === 0) {
                                     targetY = 0;
-                                    itemH = 116;
+                                    itemH = recentSection.height;
                                 } else {
                                     var row = Math.floor(launcher.kbIndex / launcher.gridColumns);
-                                    targetY = recentH + row * 126;
-                                    itemH = 126;
+                                    targetY = recentH + row * scrollContainer.gridCellHeight;
+                                    itemH = scrollContainer.gridCellHeight;
                                 }
                                 var viewH = appFlickable.height;
+                                var maxY = Math.max(0, appFlickable.contentHeight - viewH);
                                 if (targetY < appFlickable.contentY)
-                                    appFlickable.contentY = targetY;
+                                    appFlickable.contentY = Math.min(targetY, maxY);
                                 else if (targetY + itemH > appFlickable.contentY + viewH)
-                                    appFlickable.contentY = Math.max(0, targetY + itemH - viewH);
+                                    appFlickable.contentY = Math.min(maxY, Math.max(0, targetY + itemH - viewH));
                             }
 
                             Connections {
                                 target: launcher
                                 function onKbIndexChanged() { scrollContainer.scrollToSelected() }
                                 function onKbSectionChanged() { scrollContainer.scrollToSelected() }
+                                function onSelectedCategoryChanged() {
+                                    appFlickable.contentY = 0;
+                                    scrollContainer.scrollToSelected();
+                                }
                             }
 
                             Flickable {
@@ -828,7 +811,7 @@ Scope {
                                                 required property var modelData
                                                 required property int index
                                                 width: appGrid.cellWidth
-                                                height: 126
+                                                height: scrollContainer.gridCellHeight
 
                                                 AppIcon {
                                                     anchors.centerIn: parent

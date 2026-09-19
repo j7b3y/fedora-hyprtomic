@@ -95,7 +95,7 @@ Scope {
                 anchors.rightMargin: Root.Theme.padding
                 spacing: Root.Theme.paddingSmall
 
-                // App launcher (rofi drun) — leftmost item.
+                // App launcher (quickshell launcher) — leftmost item.
                 SearchButton {
                     Layout.alignment: Qt.AlignVCenter
                 }

@@ -3,7 +3,9 @@ import Quickshell
 import Quickshell.Wayland
 import "../.." as Root
 
-// NotificationToastLayer — Wayland overlay that stacks toast popups top-right
+// NotificationToastLayer — Wayland overlay that stacks toast popups at the
+// bottom-right, above the shelf. New notifications appear closest to the
+// shelf and older ones move up.
 // Listens to NotificationService.newNotification signal and auto-dismisses via timer
 Scope {
     id: toastLayer
@@ -37,20 +39,17 @@ Scope {
         WlrLayershell.namespace:      "quickshell:notifications-toast"
         WlrLayershell.keyboardFocus:  WlrKeyboardFocus.None
 
-        // Anchor only top+right so the window doesn't cover the full screen
-        anchors.top:   true
-        anchors.right: true
-        width:  400
-        height: toastCol.implicitHeight + 40
+        // Anchor bottom+right, clear of the shelf, so toasts never cover it.
+        anchors.bottom: true
+        anchors.right:  true
+        margins.bottom: Root.Theme.shelfHeight + Root.Theme.spacingLarge
+        margins.right:  Root.Theme.spacingLarge
+        width:  360
+        height: toastCol.implicitHeight
 
         Column {
             id: toastCol
-            anchors {
-                top:         parent.top
-                right:       parent.right
-                topMargin:   Root.Theme.spacingLarge + 4
-                rightMargin: Root.Theme.spacingLarge
-            }
+            anchors.fill: parent
             spacing: Root.Theme.spacingSmall
 
             Repeater {

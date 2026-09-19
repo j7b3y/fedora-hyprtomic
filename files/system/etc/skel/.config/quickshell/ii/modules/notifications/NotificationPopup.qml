@@ -16,7 +16,7 @@ Item {
     width:  parent ? parent.width : 360
     height: card.height + 8
 
-    property real _slideY:  -16
+    property real _slideY:  16
     property real _opacity: 0
 
     Component.onCompleted: appearAnim.start()

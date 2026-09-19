@@ -105,6 +105,14 @@ gui_env=(
     "HYPRTOMIC_QS_CONFIG=${HYPRTOMIC_QS_CONFIG:-ii}"
 )
 
+# BlueZ (bluetoothctl) and NetworkManager (nmcli) are host services on the
+# system D-Bus, but distrobox only shares the user session bus. Point
+# system-bus clients at the host socket mounted by distrobox so the shell's
+# Bluetooth/Network panels talk to the real daemons.
+if [ -S /run/dbus/system_bus_socket ] && [ -z "${DBUS_SYSTEM_BUS_ADDRESS:-}" ]; then
+    gui_env+=("DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host/run/dbus/system_bus_socket")
+fi
+
 # VM (virtio-gpu): Qt's EGL path fails ("egl failed to create dri2 screen"),
 # which makes Qt Quick apps (quickshell, ghostty) die. Force software rendering
 # only when virtio is the ONLY GPU (a passed-through/SR-IOV i915 keeps

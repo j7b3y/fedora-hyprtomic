@@ -25,7 +25,7 @@ PACMAN_PKGS=(
   pavucontrol
   # session helpers used by the shell (systemd/hyprland sockets are shared)
   uwsm           # launcher starts apps via `uwsm app` scopes
-  networkmanager # nmcli -> host NetworkManager over the shared system D-Bus
+  networkmanager # nmcli client; the daemon runs on the host (see DBUS_SYSTEM_BUS_ADDRESS)
   hyprlock       # power menu lock action
   # Qt6 stack used by quickshell / ii
   qt6-base qt6-declarative qt6-wayland qt6-5compat qt6-imageformats

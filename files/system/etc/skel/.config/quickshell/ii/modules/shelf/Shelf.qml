@@ -159,6 +159,11 @@ Scope {
                 StatusArea {
                     Layout.alignment: Qt.AlignVCenter
                 }
+
+                // Notification history (unread badge); rightmost item.
+                NotificationButton {
+                    Layout.alignment: Qt.AlignVCenter
+                }
             }
         }
     }

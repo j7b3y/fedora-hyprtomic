@@ -12,15 +12,39 @@ Scope {
     id: notifCenter
 
     property bool panelVisible: false
-    property bool _showing: false
+    // The window is created once and kept for the shell lifetime; only its
+    // visibility and the panel position change on toggle.
+    property bool _windowVisible: false
     property bool _panelOpen: false
 
     onPanelVisibleChanged: {
         if (panelVisible) {
-            _showing = true;
-        } else {
+            closeTimer.stop();
+            _windowVisible = true;
+            // Start from the hidden position and slide in on the next frame.
             _panelOpen = false;
+            openDelayTimer.restart();
+            // Opening the center counts as reading the notifications.
+            NotificationService.markAllRead();
+        } else {
+            openDelayTimer.stop();
+            _panelOpen = false;
+            closeTimer.restart();
         }
+    }
+
+    Timer {
+        id: openDelayTimer
+        interval: 16
+        repeat: false
+        onTriggered: if (notifCenter.panelVisible) notifCenter._panelOpen = true
+    }
+
+    Timer {
+        id: closeTimer
+        interval: Root.Theme.animDuration + 40
+        repeat: false
+        onTriggered: if (!notifCenter.panelVisible) notifCenter._windowVisible = false
     }
 
     // ── IPC Handler ──────────────────────────────────────────────
@@ -32,13 +56,14 @@ Scope {
         function hide(): void { notifCenter.panelVisible = false; }
     }
 
-    // ── Overlay window / panel ──────────────────────────────────
+    // The window is created once and kept for the shell lifetime; only its
+    // visibility and the panel position change on toggle.
     Loader {
-        active: notifCenter._showing
+        active: true
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            visible: true
+            visible: notifCenter._windowVisible
 
             anchors {
                 top: true
@@ -52,16 +77,9 @@ Scope {
 
             WlrLayershell.namespace: "quickshell:notifications"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-
-            Component.onCompleted: openDelayTimer.start()
-
-            Timer {
-                id: openDelayTimer
-                interval: 16
-                repeat: false
-                onTriggered: if (notifCenter.panelVisible) notifCenter._panelOpen = true
-            }
+            WlrLayershell.keyboardFocus: notifCenter._panelOpen
+                ? WlrKeyboardFocus.Exclusive
+                : WlrKeyboardFocus.None
 
             Shortcut {
                 sequence: "Escape"
@@ -93,50 +111,19 @@ Scope {
 
                     height: Math.min(panelContent.implicitHeight, panelClip.height - Root.Theme.spacingSmall * 2)
 
-                    states: [
-                        State {
-                            name: "visible"
-                            when: notifCenter._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panel.parent.height - panel.height - Root.Theme.spacingSmall
-                            }
-                        },
-                        State {
-                            name: "hidden"
-                            when: !notifCenter._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panel.parent.height
-                            }
-                        }
-                    ]
+                    // Slide between the clip's bottom edge (hidden) and just
+                    // above the shelf (shown); a direct binding keeps the
+                    // position correct on the very first frame.
+                    y: notifCenter._panelOpen
+                        ? panelClip.height - height - Root.Theme.spacingSmall
+                        : panelClip.height
 
-                    transitions: [
-                        Transition {
-                            from: "hidden"
-                            to: "visible"
-                            NumberAnimation {
-                                property: "y"
-                                duration: Root.Theme.animDuration
-                                easing.type: Easing.OutCubic
-                            }
-                        },
-                        Transition {
-                            from: "visible"
-                            to: "hidden"
-                            SequentialAnimation {
-                                NumberAnimation {
-                                    property: "y"
-                                    duration: Root.Theme.animDuration
-                                    easing.type: Easing.OutCubic
-                                }
-                                ScriptAction {
-                                    script: notifCenter._showing = false
-                                }
-                            }
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: Root.Theme.animDuration
+                            easing.type: Easing.OutCubic
                         }
-                    ]
+                    }
 
                     radius: Root.Theme.panelRadius
                     color: Qt.rgba(Root.Theme.panelBg.r, Root.Theme.panelBg.g, Root.Theme.panelBg.b, 0.78)

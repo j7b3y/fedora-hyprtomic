@@ -149,11 +149,27 @@ Scope {
         }
     }
 
-    // Process definitions outside Loader so they persist for startDetached calls
-    Process { id: shutdownProc; command: ["systemctl", "poweroff"] }
-    Process { id: rebootProc;   command: ["systemctl", "reboot"] }
-    Process { id: lockProc;     command: ["hyprlock"] }
-    Process { id: suspendProc;  command: ["systemctl", "suspend"] }
+    // Process definitions outside Loader so they persist for startDetached calls.
+    // The shell runs inside the GUI distrobox container, which is not booted
+    // with systemd (created without --init), so systemctl must be forwarded to
+    // the host via distrobox-host-exec. hyprlock is container-side (Wayland
+    // socket is shared).
+    Process {
+        id: shutdownProc
+        command: ["distrobox-host-exec", "systemctl", "poweroff"]
+        onExited: (code, status) => { if (code !== 0) console.warn("powermenu: poweroff failed:", code) }
+    }
+    Process {
+        id: rebootProc
+        command: ["distrobox-host-exec", "systemctl", "reboot"]
+        onExited: (code, status) => { if (code !== 0) console.warn("powermenu: reboot failed:", code) }
+    }
+    Process { id: lockProc; command: ["hyprlock"] }
+    Process {
+        id: suspendProc
+        command: ["distrobox-host-exec", "systemctl", "suspend"]
+        onExited: (code, status) => { if (code !== 0) console.warn("powermenu: suspend failed:", code) }
+    }
 
     IpcHandler {
         target: "powermenu"

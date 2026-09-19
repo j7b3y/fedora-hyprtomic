@@ -32,6 +32,23 @@ local function _exists(p)
     if f then io.close(f); return true end
     return false
 end
+
+-- nwg-displays support: the GUI (Arch container) writes Lua layouts when you
+-- apply monitor settings and workspace assignments. Load them before
+-- local.conf so a manual override still wins.
+if _exists(_HOME .. "/.config/hypr/monitors.lua") then
+    local ok = pcall(require, "monitors")
+    if not ok then
+        hl.notification.create({ text = "hypr: ~/.config/hypr/monitors.lua failed to load; using auto-detect", duration = 5000 })
+    end
+end
+if _exists(_HOME .. "/.config/hypr/workspaces.lua") then
+    local ok = pcall(require, "workspaces")
+    if not ok then
+        hl.notification.create({ text = "hypr: ~/.config/hypr/workspaces.lua failed to load; skipping", duration = 5000 })
+    end
+end
+
 local localCfg = {}
 if _exists(_HOME .. "/.config/hypr/local.conf") then
     local ok, cfg = pcall(dofile, _HOME .. "/.config/hypr/local.conf")

@@ -18,6 +18,10 @@ PACMAN_PKGS=(
   # GUI apps / widgets
   fuzzel cava libqalculate songrec translate-shell hyprpicker wf-recorder swappy
   rofi # wayland-native since 2.0 (provides/replaces the old rofi-wayland); shelf search + window switcher
+  # monitor/output management GUI (GTK3): drag displays, set resolution/scale/
+  # rotation, apply. Writes ~/.config/hypr/{monitors,workspaces}.lua, which
+  # hyprland.lua requires when present (see "nwg-displays support").
+  nwg-displays
   tesseract tesseract-data-eng tesseract-data-jpn imagemagick
   wtype cliphist brightnessctl playerctl libnotify dex
   kdialog kirigami syntax-highlighting matugen

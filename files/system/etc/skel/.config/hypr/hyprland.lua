@@ -240,7 +240,7 @@ hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 1.21, bezier = "a
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
 
 -- Keybindings
-hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("hyprbind"), { desc = "キーバインドを確認" })
+hl.bind(mainMod .. " + slash", hl.dsp.exec_cmd("hyprbind"), { desc = "キーバインドを確認" })
 hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal), { desc = "ターミナルを開く (単体)" })
 hl.bind(mainMod .. " + X", hl.dsp.window.close(), { desc = "アクティブウィンドウを閉じる" })
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager), { desc = "ファイルマネージャを開く" })
@@ -266,6 +266,9 @@ hl.bind(mainMod .. " + F", function()
     end
 end, { desc = "フローティング切り替え" })
 hl.bind("Henkan_Mode", hl.dsp.exec_cmd(menu), { desc = "アプリランチャを開く (変換キー)" })
+-- Modifier-only chord: hold Super and press/release Alt (the documented
+-- Hyprland pattern for binding two modifiers). Kept alongside the Henkan key.
+hl.bind(mainMod .. " + ALT + Alt_L", hl.dsp.exec_cmd(menu), { release = true, desc = "アプリランチャ (Super+Alt)" })
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切り替え (dwindle)" })
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })

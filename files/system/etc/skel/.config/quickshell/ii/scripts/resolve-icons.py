@@ -15,9 +15,13 @@ script's hardcoded scoring preferred the `Papirus` directory.
 
 Usage:
     resolve-icons.py [icon_name ...]
+    resolve-icons.py --wmclass [window_class ...]
 
 If no icon names are given, scans all .desktop files for Icon= entries
 and resolves those. Otherwise, resolves only the supplied names.
+With ``--wmclass`` the arguments are window classes (as reported by the
+compositor): each class is mapped to a desktop entry via ``StartupWMClass``
+(or the entry id) before its ``Icon=`` value is resolved.
 
 Output: name<TAB>path (one per line). Names that cannot be resolved are
 omitted. Symbolic icons (`*/symbolic/*`) are skipped — they render as
@@ -148,20 +152,22 @@ def resolve(name: str) -> str | None:
     return _manual_search(name)
 
 
+APP_DIRS = [
+    "/usr/share/applications",
+    "/usr/local/share/applications",
+    "/run/current-system/sw/share/applications",
+    "/etc/profiles/per-user/underdone/share/applications",
+    os.path.expanduser("~/.nix-profile/share/applications"),
+    os.path.expanduser("~/.local/share/applications"),
+    "/var/lib/flatpak/exports/share/applications",
+    os.path.expanduser("~/.local/share/flatpak/exports/share/applications"),
+]
+
+
 def _scan_desktop_icons() -> list[str]:
     """Return unique icon names from all installed .desktop files."""
-    app_dirs = [
-        "/usr/share/applications",
-        "/usr/local/share/applications",
-        "/run/current-system/sw/share/applications",
-        "/etc/profiles/per-user/underdone/share/applications",
-        os.path.expanduser("~/.nix-profile/share/applications"),
-        os.path.expanduser("~/.local/share/applications"),
-        "/var/lib/flatpak/exports/share/applications",
-        os.path.expanduser("~/.local/share/flatpak/exports/share/applications"),
-    ]
     seen: set[str] = set()
-    for d in app_dirs:
+    for d in APP_DIRS:
         if not os.path.isdir(d):
             continue
         for path in glob.glob(os.path.join(d, "*.desktop")):
@@ -178,15 +184,74 @@ def _scan_desktop_icons() -> list[str]:
     return sorted(seen)
 
 
+def _parse_desktop_entry(path: str) -> dict[str, str]:
+    """Parse the [Desktop Entry] group of a .desktop file."""
+    values: dict[str, str] = {}
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            in_entry = False
+            for line in f:
+                line = line.strip()
+                if line.startswith("["):
+                    in_entry = line == "[Desktop Entry]"
+                    continue
+                if not in_entry or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                values.setdefault(key.strip(), val.strip())
+    except OSError:
+        return {}
+    return values
+
+
+def _wmclass_index() -> dict[str, str]:
+    """Map lowercased window classes to the desktop entry's Icon= value.
+
+    Window classes (``google-chrome``) do not always match the icon name
+    (``com.google.Chrome``); the desktop file's ``StartupWMClass`` and its
+    own id are the canonical mappings.
+    """
+    index: dict[str, str] = {}
+    for d in APP_DIRS:
+        for path in glob.glob(os.path.join(d, "*.desktop")):
+            entry = _parse_desktop_entry(path)
+            icon = entry.get("Icon", "")
+            if not icon:
+                continue
+            wmclass = entry.get("StartupWMClass", "")
+            if wmclass:
+                index.setdefault(wmclass.lower(), icon)
+            index.setdefault(os.path.basename(path)[: -len(".desktop")].lower(), icon)
+    return index
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "icons", nargs="*",
         help="Icon names to resolve (default: scan all .desktop files)",
     )
+    parser.add_argument(
+        "--wmclass", action="store_true",
+        help="treat the arguments as window classes and map them through "
+             "StartupWMClass / the desktop entry id",
+    )
     args = parser.parse_args()
-    names = args.icons if args.icons else _scan_desktop_icons()
     out = sys.stdout
+
+    if args.wmclass:
+        index = _wmclass_index()
+        for name in args.icons:
+            for candidate in dict.fromkeys([name, index.get(name.lower(), "")]):
+                if not candidate:
+                    continue
+                path = resolve(candidate)
+                if path:
+                    out.write(f"{name}\t{path}\n")
+                    break
+        return 0
+
+    names = args.icons if args.icons else _scan_desktop_icons()
     for name in names:
         path = resolve(name)
         if path:

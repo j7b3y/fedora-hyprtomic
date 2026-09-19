@@ -327,6 +327,13 @@ if [ -f "$KV_SRC/catppuccin-mocha-blue.kvconfig" ]; then
     kv_map FAB387 "${WARNING#\#}"                 # peach
     kv_map F2CDCD "${TEXT#\#}"                    # flamingo
     kv_map F5E0DC "${TEXT#\#}"                    # rosewater
+
+    # Text selection: the catppuccin source uses light text on a 30%-alpha
+    # accent, which is hard to read with HyprTomic's light accents. Use an
+    # opaque accent highlight with the window background as its text.
+    sed -i "s|^highlight.color=.*|highlight.color=#${ACCENT#\#}|" "$KV_DST/hyprtomic.kvconfig"
+    sed -i "s|^highlight.text.color=.*|highlight.text.color=#${BG#\#}|" "$KV_DST/hyprtomic.kvconfig"
+
     sed -i "s/^comment=.*/comment=HyprTomic (${THEME})/" "$KV_DST/hyprtomic.kvconfig"
 
     printf '[General]\ntheme=hyprtomic\n' > "$HOME/.config/Kvantum/kvantum.kvconfig"

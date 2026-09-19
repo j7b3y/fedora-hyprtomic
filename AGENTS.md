@@ -127,7 +127,7 @@ on every shell start, so the whole desktop follows the saved theme:
 | Hyprland borders | `hyprctl keyword …` + `~/.config/hypr/theme.lua` | the lua file is loaded by `hyprland.lua` on startup; the live hyprctl call covers the running session |
 | GTK3 / GTK4 | `~/.config/gtk-{3,4}.0/gtk.css` | Adwaita + named-color overrides |
 | Qt | `~/.config/{qt5ct,qt6ct}/colors/<theme>.conf` + `custom_palette=true` in the ct configs | QPalette dumps; covers widgets Kvantum does not paint |
-| Kvantum | `~/.config/Kvantum/hyprtomic/{hyprtomic.kvconfig,hyprtomic.svg}` | recolored copy of the catppuccin theme from skel; running apps pick it up on restart |
+| Kvantum | `~/.config/Kvantum/hyprtomic/{hyprtomic.kvconfig,hyprtomic.svg}` | recolored copy of the catppuccin theme from skel; text selection is overridden to an opaque accent with background-coloured text (the upstream 30%-alpha highlight is unreadable with light accents); running apps pick it up on restart |
 | Ghostty | `~/.config/ghostty/theme.conf` | pulled in by `config-file = ?theme.conf` at the end of the ghostty config (later entries win) |
 | Rofi | `~/.config/rofi/colors.rasi` | imported by `launcher.rasi` |
 

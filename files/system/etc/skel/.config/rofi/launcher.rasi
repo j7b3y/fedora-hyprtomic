@@ -1,7 +1,11 @@
 configuration {
     show-icons:          true;
     drun-display-format: "{name}";
-    hover-select:        true;
+    // hover-select is intentionally off: it makes the list (and therefore the
+    // scrollbar) follow the mouse and jump around. The quickshell launcher is
+    // the primary app launcher; rofi stays as the window switcher.
+    // hover-select:     true;
+    click-to-exit:       true;
     me-select-entry:     "";
     me-accept-entry:     "MousePrimary";
 }

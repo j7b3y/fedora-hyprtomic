@@ -49,7 +49,9 @@ Bridges between host and container:
   `Theme.qml`; switching is done from the control center.
 - **Notifications / OSD / power menu** owned by quickshell: volume OSD, volume
   keys, `Super+Delete` power menu (shutdown / reboot / lock / suspend — power
-  actions are forwarded to the host).
+  actions are forwarded to the host). Notifications keep an unread history:
+  the shelf's right end has a bell with an unread badge that opens the
+  notification center, and the history is persisted across restarts.
 - **IME + clipboard**: fcitx5 with the Mozkey IbG engine and `clipse` run in the
   container (`Super+V` clipboard history, `Super+.` emoji picker).
 - **Flatpaks** are managed on the host (system scope). Their desktop entries are
@@ -163,7 +165,7 @@ to auto-detection.
 
 ## Key bindings
 
-`SUPER` is the main modifier. The full list is available with `Super+S`
+`SUPER` is the main modifier. The full list is available with `Super+/`
 (hyprbind).
 
 | Shortcut | Action |
@@ -174,8 +176,8 @@ to auto-detection.
 | `Super+Arrow` / `Super+Shift+Arrow` | Focus / move window |
 | `Super+1…0` / `Super+Shift+1…0` | Focus / move window to workspace 1–10 |
 | `Super+Tab`, `Super+[` `]`, `Super+wheel` | Previous / next workspace |
-| `Super+S` | Keybind viewer (hyprbind) |
-| 変換 (`Henkan`) | App launcher (quickshell launcher) |
+| `Super+/` | Keybind viewer (hyprbind) |
+| `Super+Alt` (hold Super, tap & release Alt) or 変換 (`Henkan`) | App launcher (quickshell launcher) |
 | `Super+A` | Control center |
 | `Super+Delete` | Power menu |
 | `Super+L` | Lock (hyprlock) |

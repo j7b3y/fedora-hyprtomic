@@ -8,7 +8,8 @@ setopt hist_ignore_dups
 setopt hist_ignore_all_dups
 
 # Alias
-alias claude='claude --model claude-sonnet-5 --enable-auto-mode --append-system-prompt-file ~/claude.md'
+alias opencode='opencode2'
+alias vim='nvim'
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 

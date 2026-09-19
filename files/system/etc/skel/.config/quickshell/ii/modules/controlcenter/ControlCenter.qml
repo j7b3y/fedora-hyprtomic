@@ -9,7 +9,12 @@ Scope {
     id: controlCenter
 
     property bool panelVisible: false
-    property bool _showing: false
+    // The PanelWindow itself lives for the whole shell lifetime. It becomes
+    // visible for the duration of the open/close animation only, so the
+    // surface is not destroyed and re-created (at the wrong position) on
+    // every toggle.
+    property bool _windowVisible: false
+    // Drives the inner panel position; true = fully shown above the shelf.
     property bool _panelOpen: false
     property string currentPage: "main"
 
@@ -22,15 +27,38 @@ Scope {
 
     onPanelVisibleChanged: {
         if (panelVisible) {
-            _showing = true
+            closeTimer.stop()
+            _windowVisible = true
+            // Start from the hidden position and slide up on the next frame.
+            _panelOpen = false
+            openDelayTimer.restart()
             wifiStatusProc.running = true
             btStatusProc.running = true
             btConnectedProc.running = true
             brightnessCheckProc.running = true
         } else {
+            openDelayTimer.stop()
+            // Slide down first; closeTimer hides the window afterwards.
             _panelOpen = false
+            closeTimer.restart()
             resetPageTimer.running = true
         }
+    }
+
+    // Give the surface one frame to settle before starting the slide-up.
+    Timer {
+        id: openDelayTimer
+        interval: 16
+        repeat: false
+        onTriggered: if (controlCenter.panelVisible) controlCenter._panelOpen = true
+    }
+
+    // Hide the window only after the slide-down animation finished.
+    Timer {
+        id: closeTimer
+        interval: Root.Theme.animDuration + 40
+        repeat: false
+        onTriggered: if (!controlCenter.panelVisible) controlCenter._windowVisible = false
     }
 
     Timer {
@@ -194,12 +222,16 @@ Scope {
 
     // ── Overlay window / panel ────────────────────────────────────
 
+    // The window is loaded once and kept for the shell's lifetime; only its
+    // visibility and the inner panel position change on toggle. Re-creating
+    // the layer surface on every open caused a one-frame flash at the wrong
+    // position (and the old state machine could get stuck).
     Loader {
-        active: controlCenter._showing
+        active: true
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            visible: true
+            visible: controlCenter._windowVisible
 
             anchors {
                 top: true
@@ -213,16 +245,9 @@ Scope {
 
             WlrLayershell.namespace: "quickshell:controlcenter"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-
-            Component.onCompleted: openDelayTimer.start()
-
-            Timer {
-                id: openDelayTimer
-                interval: 16
-                repeat: false
-                onTriggered: if (controlCenter.panelVisible) controlCenter._panelOpen = true
-            }
+            WlrLayershell.keyboardFocus: controlCenter._panelOpen
+                ? WlrKeyboardFocus.Exclusive
+                : WlrKeyboardFocus.None
 
             Shortcut {
                 sequence: "Escape"
@@ -259,54 +284,19 @@ Scope {
                     anchors.right: parent.right
                     anchors.rightMargin: Root.Theme.spacingSmall
 
-                    // parent is now panelClip (height = screen - shelf).
-                    // hidden  → y = parent.height  (top edge at clip bottom = shelf top, body clipped)
-                    // visible → y = parent.height - panel.height - spacing  (above shelf)
+                    // Slide between the clip's bottom edge (hidden) and just
+                    // above the shelf (shown). A direct binding + Behavior
+                    // keeps the position correct on the very first frame.
+                    y: controlCenter._panelOpen
+                        ? parent.height - height - Root.Theme.spacingSmall
+                        : parent.height
 
-                    states: [
-                        State {
-                            name: "visible"
-                            when: controlCenter._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panel.parent.height - panel.height - Root.Theme.spacingSmall
-                            }
-                        },
-                        State {
-                            name: "hidden"
-                            when: !controlCenter._panelOpen
-                            PropertyChanges {
-                                target: panel
-                                y: panel.parent.height
-                            }
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: Root.Theme.animDuration
+                            easing.type: Easing.OutCubic
                         }
-                    ]
-
-                    transitions: [
-                        Transition {
-                            from: "hidden"
-                            to: "visible"
-                            NumberAnimation {
-                                property: "y"
-                                duration: Root.Theme.animDuration
-                                easing.type: Easing.OutCubic
-                            }
-                        },
-                        Transition {
-                            from: "visible"
-                            to: "hidden"
-                            SequentialAnimation {
-                                NumberAnimation {
-                                    property: "y"
-                                    duration: Root.Theme.animDuration
-                                    easing.type: Easing.OutCubic
-                                }
-                                ScriptAction {
-                                    script: controlCenter._showing = false
-                                }
-                            }
-                        }
-                    ]
+                    }
 
                 radius: Root.Theme.panelRadius
                 color: Qt.rgba(Root.Theme.panelBg.r, Root.Theme.panelBg.g, Root.Theme.panelBg.b, 0.78)

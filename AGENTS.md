@@ -99,6 +99,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 |---|---|
 | Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel). The GUI container's `nwg-displays` writes `monitors.lua`/`workspaces.lua`; `hyprland.lua` requires them when present (before `local.conf`, so manual overrides win). |
 | SDDM login | `/etc/pam.d/sddm` (shipped) is password-first with a fingerprint fallback: `pam_exec` + `/usr/libexec/hyprtomic/pam-fingerprint-gate` skips `pam_fprintd` when a password was submitted, otherwise `pam_fprintd` (10s, 2 tries) runs before `password-auth`. `fprintd`/`fprintd-pam` ship on the host. The theme is the upstream astronaut theme overlaid from `files/system/usr/share/hyprtomic/sddm/` by `install-sddm-theme.sh`; `Components/LoginForm.qml` there is a copy of upstream plus the `FingerprintStatus` line — refresh it when upstream changes the form. |
+| Lock screen | `~/.config/hypr/hyprlock.conf` (skel) enables hyprlock's own fprintd support (`auth:fingerprint:enabled`) and shows `$FPRINTPROMPT` under the input field; `/etc/pam.d/hyprlock` (shipped) uses `password-auth` on purpose so PAM's `pam_fprintd` (authselect `with-fingerprint`, only in `system-auth`) cannot fight hyprlock for the reader. The container's hyprlock shares the config and reaches the host's fprintd over the shared system bus. |
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
 | Terminal | The host ships `ghostty` (copr `scottames/ghostty`); its config falls back to a host CJK mono font (HackGen ships in the container only). The container keeps its own ghostty for shell actions, but its desktop entry is overridden in `/usr/local/share/applications/com.mitchellh.ghostty.desktop` to run `distrobox-host-exec ghostty`, so the launcher/rofi open the host terminal like `Super+Q`. |
 | Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. The shelf's left button and `Super+Alt` (or the Henkan key) open the quickshell launcher; the bell at the right end opens the notification center (unread badge; history persisted to `~/.cache/quickshell/notifications.json`, opening the center marks it read); `rofi` (container, exported) remains for the `Super+Escape` window switcher. |
@@ -231,7 +232,9 @@ End-to-end: on a test machine, update the host image, reboot, run
 - SDDM logs in password-first and only falls back to the fingerprint reader
   when the password field is submitted empty (`/etc/pam.d/sddm` +
   `pam-fingerprint-gate`); the theme shows the pam_fprintd prompts and hints
-  at the empty-submit flow in the password placeholder.
+  at the empty-submit flow in the password placeholder. hyprlock unlocks with
+  its own fprintd support (`auth:fingerprint:enabled`, `$FPRINTPROMPT` label)
+  and a password-only PAM stack.
 - The Arch dotfiles are ported under `files/system/etc/skel/`: a Lua Hyprland
   config (defaults + optional `~/.config/hypr/local.conf` for machine-specific
   settings), the quickshell `ii` shell, GTK/Qt/Kvantum theming, ghostty / rofi /

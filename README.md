@@ -174,6 +174,27 @@ The astronaut theme is cloned at build time and overlaid from
   `with-fingerprint` feature only patches `system-auth` (sudo, TTY, hyprlock),
   which is why SDDM needs its own copy.
 
+### Lock screen (hyprlock)
+
+hyprlock does not use PAM for fingerprints: it talks to fprintd itself, in
+parallel with the password field, and only when enabled in
+`~/.config/hypr/hyprlock.conf` (shipped) via `auth:fingerprint:enabled`
+(`auth { fingerprint { enabled = true } }`). The `$FPRINTPROMPT` label below the
+input field shows the scan hint and stays empty when fingerprint auth is off or
+unavailable, so nothing changes on machines without a reader or enrolled
+prints.
+
+- **Password path**: `/etc/pam.d/hyprlock` is shipped with `password-auth` on
+  purpose. The hyprlock package's `auth include login` would inherit
+  `system-auth`, whose `pam_fprintd` (authselect's `with-fingerprint`) fights
+  hyprlock for the reader and makes typed passwords wait for the fingerprint
+  timeout.
+- **Container**: the power menu's lock runs the container's hyprlock with the
+  same config; it reaches the host's fprintd through the shared system bus and
+  falls back to the password if that is not possible.
+- **Disable**: set `auth:fingerprint:enabled = false` (or drop the block) for
+  password-only unlocking.
+
 ### Shell (`~/.config/quickshell/ii/`)
 
 - `Theme.qml` + `current-theme`: the theme table and the saved selection. The

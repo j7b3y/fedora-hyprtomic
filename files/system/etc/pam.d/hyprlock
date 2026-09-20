@@ -1,0 +1,12 @@
+#%PAM-1.0
+#
+# HyprTomic: hyprlock authenticates fingerprints itself
+# (auth:fingerprint:enabled in ~/.config/hypr/hyprlock.conf) and talks to
+# fprintd directly, so this stack must not run pam_fprintd: it would claim the
+# reader, delay the password path and make hyprlock's own implementation lose
+# the device.  authselect's with-fingerprint feature only patches system-auth,
+# and password-auth is the password stack SDDM falls back to as well.
+#
+# The file replaces the hyprlock package's `auth include login`; keep it in
+# sync if the package starts shipping more than the auth stack.
+auth        include     password-auth

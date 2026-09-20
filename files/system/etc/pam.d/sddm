@@ -1,0 +1,43 @@
+#%PAM-1.0
+#
+# HyprTomic: password first, fingerprint only when the password field was
+# submitted empty.
+#
+# pam_exec hands the submitted password to
+# /usr/libexec/hyprtomic/pam-fingerprint-gate, which succeeds for a non-empty
+# password; that jump skips pam_fprintd and password-auth verifies the
+# password.  An empty password fails the gate, so pam_fprintd runs with the
+# timeout below and pam_permit.so ends the fingerprint path.  When the
+# fingerprint fails or times out, password-auth is reached with the empty
+# password and rejects it, so the greeter asks again.
+#
+# The file is a copy of the sddm package's /etc/pam.d/sddm with the
+# fingerprint lines inserted; keep the rest in sync when the package updates.
+# Debugging: drop "quiet quiet_log" from the pam_exec line to see the gate's
+# exit status in the journal.
+auth     [success=done ignore=ignore default=bad] pam_selinux_permit.so
+auth     [success=1 default=ignore] pam_exec.so quiet quiet_log expose_authtok /usr/libexec/hyprtomic/pam-fingerprint-gate
+auth     [success=1 default=ignore] pam_fprintd.so timeout=10 max-tries=2
+auth        substack      password-auth
+auth        required      pam_permit.so
+-auth        optional      pam_gnome_keyring.so
+-auth        optional      pam_kwallet5.so
+-auth        optional      pam_kwallet.so
+auth        include       postlogin
+
+account     required      pam_nologin.so
+account     include       password-auth
+
+password    include       password-auth
+
+session     required      pam_selinux.so close
+session     required      pam_loginuid.so
+-session    optional      pam_ck_connector.so
+session     required      pam_selinux.so open
+session     optional      pam_keyinit.so force revoke
+session     required      pam_namespace.so
+session     include       password-auth
+-session    optional      pam_gnome_keyring.so auto_start
+-session    optional      pam_kwallet5.so auto_start
+-session    optional      pam_kwallet.so auto_start
+session     include       postlogin

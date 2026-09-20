@@ -95,6 +95,17 @@ sync-skel-config:
 
 # --- SDDM login screen ---
 
+# Enroll a fingerprint for login (SDDM empty-submit, sudo, hyprlock).
+# Run from a host terminal; the default is the right index finger, pass
+# another name to enroll more, e.g. `ujust enroll-fingerprint left-thumb`.
+enroll-fingerprint finger="right-index-finger":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v fprintd-enroll >/dev/null || { echo "fprintd-enroll not found (update the host image first)"; exit 1; }
+    fprintd-enroll -f "{{finger}}"
+    echo
+    fprintd-list "$(id -un)"
+
 # Replace the SDDM login-screen wallpaper. Copies the astronaut theme to a
 # private name under /usr/local (=/var/usrlocal host state: survives updates)
 # and selects it via /etc/sddm.conf.d/zz-wallpaper.conf (sorts after the

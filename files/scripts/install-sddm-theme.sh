@@ -15,6 +15,12 @@ cp -r "$TMP/sddm-theme/." "$THEME/"
 mkdir -p "$THEME/Backgrounds"
 cp /usr/share/hyprtomic/sddm/wallpaper.jpg "$THEME/Backgrounds/wallpaper.jpg"
 
+# QML overrides (fingerprint status line in the login form)
+if [ -d /usr/share/hyprtomic/sddm/Components ]; then
+  mkdir -p "$THEME/Components"
+  cp /usr/share/hyprtomic/sddm/Components/*.qml "$THEME/Components/"
+fi
+
 if [ -f /usr/share/hyprtomic/sddm/theme.conf ]; then
   mkdir -p "$THEME/Themes"
   cp /usr/share/hyprtomic/sddm/theme.conf "$THEME/Themes/custom.conf"

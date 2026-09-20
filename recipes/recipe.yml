@@ -57,6 +57,12 @@ modules:
         # it via `systemctl --user start hyprpolkitagent`.
         - hyprpolkitagent
         - gnome-keyring
+        # Fingerprint login: fprintd daemon + pam_fprintd (and the enrollment
+        # CLI). The SDDM PAM stack (/etc/pam.d/sddm) only runs pam_fprintd
+        # when the password field was submitted empty; enroll fingers with
+        # `fprintd-enroll` in a host terminal.
+        - fprintd
+        - fprintd-pam
         # Qt wayland backend
         - qt5-qtwayland
         # Qt theming on the host: qt6ct (platform theme) + Kvantum (widget

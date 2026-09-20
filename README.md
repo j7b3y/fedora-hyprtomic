@@ -144,6 +144,36 @@ The Hyprland config loads `monitors.lua`/`workspaces.lua` when present (before
 `local.conf`), so the layout survives restarts. Delete those files to fall back
 to auto-detection.
 
+### Login screen (SDDM)
+
+The astronaut theme is cloned at build time and overlaid from
+`files/system/usr/share/hyprtomic/sddm/` (`theme.conf`, wallpaper and the
+`Components/` QML overrides). The login policy itself lives in
+`/etc/pam.d/sddm`:
+
+- **Password first, fingerprint on empty submit.** `pam_exec` passes the
+  submitted password to `/usr/libexec/hyprtomic/pam-fingerprint-gate`. A
+  non-empty password makes the stack skip `pam_fprintd` and verifies the
+  password as before — a typed password never waits for the reader. An empty
+  password fails the gate and starts `pam_fprintd`
+  (`timeout=10 max-tries=2`); if that fails or times out, the login fails and
+  the password can be typed and submitted again.
+- **Enrollment**: run `ujust enroll-fingerprint` (or `fprintd-enroll`) in a
+  host terminal; the daemon is D-Bus activated, there is no service to enable.
+  `fprintd-list` shows the enrolled fingers, `fprintd-delete` removes them.
+- **Feedback**: the theme shows the pam_fprintd messages (e.g.
+  “指紋読取装置に指を置いてください”, “検証がタイムアウトしました”) below the
+  password field, and the empty password field hints at the flow via
+  `TranslatePlaceholderPassword` in `theme.conf`.
+- **Caveat**: fingerprint logins pass an empty password to the session, so
+  gnome-keyring/KWallet are not unlocked; use the password when a keyring is
+  needed.
+- **Tuning**: adjust `timeout=`/`max-tries=` on the `pam_fprintd.so` line.
+  `/etc/pam.d/sddm` is a copy of the sddm package's PAM file plus the
+  fingerprint lines, so re-check it after a Fedora/sddm update. authselect's
+  `with-fingerprint` feature only patches `system-auth` (sudo, TTY, hyprlock),
+  which is why SDDM needs its own copy.
+
 ### Shell (`~/.config/quickshell/ii/`)
 
 - `Theme.qml` + `current-theme`: the theme table and the saved selection. The

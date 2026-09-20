@@ -1,0 +1,18 @@
+#!/bin/sh
+# HyprTomic PAM helper: decides whether SDDM falls back to the fingerprint
+# reader.
+#
+# /etc/pam.d/sddm runs this through pam_exec.so with expose_authtok, so the
+# password submitted in the greeter arrives on stdin.  Exit 0 when it is
+# non-empty: the PAM stack then skips pam_fprintd and verifies the password
+# with password-auth.  Exit non-zero when the field was submitted empty: the
+# stack then runs pam_fprintd (with its own timeout) before failing.
+#
+# pam_exec starts the script with a sanitised environment (no PATH) and it
+# runs on every login attempt, so use shell builtins only and keep it tiny.
+# A password whose first byte is a newline is treated as empty; the only
+# effect is that the fingerprint reader is tried first, the password is still
+# verified afterwards.
+
+IFS= read -r authtok
+[ -n "$authtok" ]

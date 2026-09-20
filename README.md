@@ -177,7 +177,7 @@ to auto-detection.
 | `Super+1…0` / `Super+Shift+1…0` | Focus / move window to workspace 1–10 |
 | `Super+Tab`, `Super+[` `]`, `Super+wheel` | Previous / next workspace |
 | `Super+/` | Keybind viewer (hyprbind) |
-| `Super+Alt` (hold Super, tap & release Alt) or 変換 (`Henkan`) | App launcher (quickshell launcher) |
+| `Super+Alt` (hold Super, tap Alt) or 変換 (`Henkan`) | App launcher (quickshell launcher) |
 | `Super+A` | Control center |
 | `Super+Delete` | Power menu |
 | `Super+L` | Lock (hyprlock) |

@@ -266,9 +266,10 @@ hl.bind(mainMod .. " + F", function()
     end
 end, { desc = "フローティング切り替え" })
 hl.bind("Henkan_Mode", hl.dsp.exec_cmd(menu), { desc = "アプリランチャを開く (変換キー)" })
--- Modifier-only chord: hold Super and press/release Alt (the documented
--- Hyprland pattern for binding two modifiers). Kept alongside the Henkan key.
-hl.bind(mainMod .. " + ALT + Alt_L", hl.dsp.exec_cmd(menu), { release = true, desc = "アプリランチャ (Super+Alt)" })
+-- Modifier-only chord: hold Super and press Alt (Alt_L as the key with
+-- SUPER+ALT mods). Fires on the Alt press — verified on this Hyprland.
+-- Kept alongside the Henkan key.
+hl.bind(mainMod .. " + ALT + Alt_L", hl.dsp.exec_cmd(menu), { desc = "アプリランチャ (Super+Alt)" })
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切り替え (dwindle)" })
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })

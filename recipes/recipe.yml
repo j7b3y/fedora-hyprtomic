@@ -52,7 +52,10 @@ modules:
         - NetworkManager
         # Bluetooth (managed by the GUI shell)
         - bluez
-        # Auth base (polkit + hyprpolkitagent provided by wayblue base)
+        # Auth: polkit comes from the wayblue base, but the Hyprland session
+        # polkit agent does not, so install it explicitly; hyprland.lua starts
+        # it via `systemctl --user start hyprpolkitagent`.
+        - hyprpolkitagent
         - gnome-keyring
         # Qt wayland backend
         - qt5-qtwayland

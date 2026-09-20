@@ -375,7 +375,16 @@ hl.window_rule({
 hl.window_rule({
     name    = "opacity-ghostty",
     match   = { class = "^com\\.mitchellh\\.ghostty$" },
-    opacity = 1.0,
+    opacity = 0.9,
+})
+
+hl.window_rule({
+    name    = "float-bitwarden",
+    match   = { class = "bitwarden" },
+    float   = true,
+    size    = "(monitor_w*0.3) (monitor_h*0.35)",
+    center  = true,
+    opacity = 0.9,
 })
 
 hl.window_rule({
@@ -442,7 +451,7 @@ hl.window_rule({
     name    = "float-missioncenter",
     match   = { class = "io.missioncenter.MissionCenter" },
     float   = true,
-    size    = "(monitor_w*0.5) (monitor_h*0.6)",
+    size    = "(monitor_w*0.3) (monitor_h*0.35)",
     center  = true,
     opacity = 0.85,
 })
@@ -451,7 +460,7 @@ hl.window_rule({
     name    = "float-hyprbind",
     match   = { initial_title = "^HyprBind$" },
     float   = true,
-    size    = "(monitor_w*0.5) (monitor_h*0.6)",
+    size    = "(monitor_w*0.3) (monitor_h*0.35)",
     center  = true,
     opacity = 0.85,
 })

@@ -17,9 +17,20 @@ set -uo pipefail
 CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
 IMAGE="${HYPRTOMIC_GUI_IMAGE:-ghcr.io/j7b3y/hyprtomic-gui:latest}"
 
+# Container existence: `distrobox list | grep` can miss containers that the
+# container manager still knows about, in which case `distrobox create` fails
+# with "already exists" (and exits 0), turning updates into silent no-ops.
+# Ask podman directly and fall back to distrobox for non-podman setups.
 exists() {
+    if command -v podman >/dev/null 2>&1 && podman container inspect "$CONTAINER" >/dev/null 2>&1; then
+        return 0
+    fi
     distrobox list --no-color 2>/dev/null | grep -qw "$CONTAINER"
 }
+
+# Image ID (the OCI config digest) of a tag, and of the image a container runs.
+image_id() { podman image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
+container_image_id() { podman container inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null; }
 
 # Older images exported the container's ghostty to ~/.local/bin. That shim
 # shadows the host ghostty on PATH, so the terminal keybind opened an Arch
@@ -82,10 +93,35 @@ ensure() {
 }
 
 cmd_update() {
-    if exists; then
-        distrobox rm -f "$CONTAINER" || return 1
+    # Refresh the tag first. When the tag has not moved this only fetches the
+    # manifest (no layer download); when it has moved, `distrobox create`
+    # would otherwise reuse the stale local image for the same tag.
+    if command -v podman >/dev/null 2>&1; then
+        podman pull "$IMAGE" || return 1
     fi
-    ensure
+
+    # Nothing to do when the container already runs the pulled image.
+    local current target
+    current="$(container_image_id)"
+    target="$(image_id "$IMAGE")"
+    if [ -n "$target" ] && [ "$current" = "$target" ]; then
+        echo "GUI container '$CONTAINER' already uses $IMAGE" >&2
+        return 0
+    fi
+
+    # Recreate unconditionally: a failing `exists` check used to leave the
+    # container in place while `distrobox create` exited 0 with "already
+    # exists", so updates silently did nothing.
+    distrobox rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    ensure || return 1
+
+    # Verify the recreate instead of reporting success blindly.
+    current="$(container_image_id)"
+    target="$(image_id "$IMAGE")"
+    if [ -n "$target" ] && [ "$current" != "$target" ]; then
+        echo "failed to recreate '$CONTAINER' from $IMAGE" >&2
+        return 1
+    fi
 }
 
 gui_env=(

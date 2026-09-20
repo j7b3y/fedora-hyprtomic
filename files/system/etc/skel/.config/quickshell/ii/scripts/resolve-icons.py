@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -135,10 +136,77 @@ def _manual_search(name: str) -> str | None:
     return candidates[0][2]
 
 
+# ── Browser web apps ─────────────────────────────────────────────
+# Web apps installed from Chrome/Chromium ("Install as app") show up as
+# windows whose class is `<browser>-<32-char app id>-<profile>` (or
+# `crx_<id>`). Their icons are not installed into the icon theme; each app
+# keeps PNGs inside the browser profile, so resolve the class from there.
+_BROWSER_CLASS_RE = re.compile(
+    r"^(?:crx_|(?:google-chrome|chrome|chromium|brave|vivaldi|microsoft-edge|msedge|opera))",
+    re.IGNORECASE,
+)
+_APP_ID_RE = re.compile(r"(?<![a-pA-P])([a-pA-P]{32})(?![a-pA-P])")
+
+_WEBAPP_ROOTS: list[str] | None = None
+
+
+def _webapp_roots() -> list[str]:
+    """Return `<profile>/Web Applications` dirs of installed browsers.
+
+    Covers native (`~/.config/<browser>/<profile>`) and Flatpak
+    (`~/.var/app/<app>/config/<browser>/<profile>`) installs.
+    """
+    global _WEBAPP_ROOTS
+    if _WEBAPP_ROOTS is None:
+        roots: list[str] = []
+        for pattern in (
+            "~/.config/*/*/Web Applications",
+            "~/.var/app/*/config/*/*/Web Applications",
+        ):
+            roots.extend(glob.glob(os.path.expanduser(pattern)))
+        _WEBAPP_ROOTS = roots
+    return _WEBAPP_ROOTS
+
+
+def _webapp_icon(name: str) -> str | None:
+    """Resolve a browser web-app window class to the profile's icon PNG.
+
+    The icons live under
+    ``<profile>/Web Applications/Manifest Resources/<app id>/Icons``.
+    Prefer a mid-size (<= 256 px) icon, falling back to the largest one.
+    """
+    if not _BROWSER_CLASS_RE.match(name):
+        return None
+    match = _APP_ID_RE.search(name)
+    if not match:
+        return None
+    app_id = match.group(1).lower()
+    for root in _webapp_roots():
+        icons_dir = os.path.join(root, "Manifest Resources", app_id, "Icons")
+        if not os.path.isdir(icons_dir):
+            continue
+        candidates: list[tuple[int, str]] = []
+        for entry in os.listdir(icons_dir):
+            m = re.fullmatch(r"(\d+)\.png", entry)
+            if not m:
+                continue
+            path = os.path.join(icons_dir, entry)
+            if os.path.isfile(path) and os.access(path, os.R_OK):
+                candidates.append((int(m.group(1)), path))
+        if candidates:
+            candidates.sort()
+            small = [c for c in candidates if c[0] <= 256]
+            return (small or candidates)[-1][1]
+    return None
+
+
 def resolve(name: str) -> str | None:
     """Resolve an icon name to an absolute file path, or None."""
     if not name:
         return None
+    webapp = _webapp_icon(name)
+    if webapp:
+        return webapp
     direct = _direct_file(name)
     if direct:
         return direct

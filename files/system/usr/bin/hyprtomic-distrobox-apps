@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Register the .desktop files of the other distrobox containers with the host's
+# application dirs, so the quickshell launcher inside the GUI container can
+# list and launch them. Runs on the host: hyprtomic-gui-shell calls it in the
+# background at session start, `ujust refresh-distrobox-apps` re-runs it.
+#
+# The GUI container only has distrobox-export/distrobox-host-exec (distrobox
+# injects those), not the `distrobox` CLI, so distrobox-export is told to prefix
+# the exported Exec lines with `distrobox-host-exec distrobox-enter` — the one
+# form the container *can* run (the host executes the real distrobox-enter).
+#
+# The GUI container itself is skipped: the shell runs inside it and scans its
+# own /usr/share/applications directly.
+set -uo pipefail
+
+CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
+APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+MARKER="X-HyprTomic-Container="
+
+log() { printf '%s\n' "$*"; }
+
+# Container names, one per line (empty when distrobox/podman is unavailable).
+# `distrobox list` separates columns with `|`, so split on that and trim.
+container_names() {
+    distrobox list --no-color 2>/dev/null | awk -F'|' '
+        NR > 1 {
+            name = $2
+            gsub(/^[ \t]+|[ \t]+$/, "", name)
+            if (name != "") print name
+        }'
+}
+
+# Running containers only: entering a stopped container would start it, and
+# session start must not boot every distrobox. Exports of stopped containers
+# stay registered (launching them starts the container on demand).
+running_container_names() {
+    distrobox list --no-color 2>/dev/null | awk -F'|' '
+        NR > 1 {
+            name = $2
+            status = $3
+            gsub(/^[ \t]+|[ \t]+$/, "", name)
+            gsub(/^[ \t]+|[ \t]+$/, "", status)
+            if (name != "" && status ~ /^Up/) print name
+        }'
+}
+
+# Export every visible .desktop file of one container (runs inside it).
+export_container() {
+    local name="$1"
+    timeout 120 distrobox enter "$name" -- \
+        env DISTROBOX_ENTER_PATH="distrobox-host-exec distrobox-enter" \
+        sh -lc '
+            for dir in "$HOME/.local/share/applications" /usr/local/share/applications /usr/share/applications; do
+                [ -d "$dir" ] || continue
+                for f in "$dir"/*.desktop; do
+                    [ -f "$f" ] || continue
+                    grep -q "^NoDisplay=true" "$f" && continue
+                    grep -q "^Hidden=true" "$f" && continue
+                    # Never wrap an existing distrobox export/terminal entry.
+                    grep -q "^Exec=.*distrobox" "$f" && continue
+                    distrobox-export --app "$f" >/dev/null 2>&1 || true
+                done
+            done
+        ' 2>/dev/null
+}
+
+# Tag the files distrobox-export wrote for this container, so stale exports can
+# be told apart from unrelated .desktop files.
+mark_exports() {
+    local name="$1" f
+    for f in "$APPS_DIR/${name}-"*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q "^${MARKER}" "$f" && continue
+        sed -i "/^\[Desktop Entry\]$/a ${MARKER}${name}" "$f"
+    done
+}
+
+# Remove exports whose container no longer exists. Only marked files are
+# touched, and only when distrobox actually reported a container list.
+prune_stale() {
+    local known="$1" f c
+    for f in "$APPS_DIR"/*.desktop; do
+        [ -f "$f" ] || continue
+        c="$(sed -n "s/^${MARKER}//p" "$f" | head -n 1)"
+        [ -n "$c" ] || continue
+        case " ${known} " in
+            *" ${c} "*) ;;
+            *) rm -f "$f"; log "removed stale export: $(basename "$f")" ;;
+        esac
+    done
+}
+
+main() {
+    command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 0; }
+
+    local all running
+    all="$(container_names)"
+    # No container list means podman/distrobox is not answering; do not touch
+    # anything (pruning would delete every export).
+    [ -n "$all" ] || { log "no containers reported; skipping"; return 0; }
+
+    mkdir -p "$APPS_DIR"
+
+    running="$(running_container_names)"
+    local c
+    while IFS= read -r c; do
+        [ -n "$c" ] || continue
+        [ "$c" = "$CONTAINER" ] && continue
+        log "registering apps from '$c' ..."
+        export_container "$c" || true
+        mark_exports "$c" || true
+    done <<< "$running"
+
+    # Prune against every container, not just the running ones: a stopped
+    # container keeps its registered apps.
+    prune_stale "$(printf '%s ' $all)"
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+    fi
+    log "done"
+}
+
+main "$@"

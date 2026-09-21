@@ -13,11 +13,17 @@ cp -r "$TMP/sddm-theme/." "$THEME/"
 
 # Default wallpaper: theme.conf references Backgrounds/wallpaper.jpg (relative to theme dir)
 mkdir -p "$THEME/Backgrounds"
-cp /usr/share/dotfiles/assets/wallpaper.jpg "$THEME/Backgrounds/wallpaper.jpg"
+cp /usr/share/hyprtomic/sddm/wallpaper.jpg "$THEME/Backgrounds/wallpaper.jpg"
 
-if [ -f /usr/share/dotfiles/sddm/theme.conf ]; then
+# QML overrides (fingerprint status line in the login form)
+if [ -d /usr/share/hyprtomic/sddm/Components ]; then
+  mkdir -p "$THEME/Components"
+  cp /usr/share/hyprtomic/sddm/Components/*.qml "$THEME/Components/"
+fi
+
+if [ -f /usr/share/hyprtomic/sddm/theme.conf ]; then
   mkdir -p "$THEME/Themes"
-  cp /usr/share/dotfiles/sddm/theme.conf "$THEME/Themes/custom.conf"
+  cp /usr/share/hyprtomic/sddm/theme.conf "$THEME/Themes/custom.conf"
   sed -i 's|ConfigFile=.*|ConfigFile=Themes/custom.conf|' "$THEME/metadata.desktop"
 fi
 

@@ -1,0 +1,20 @@
+# Container-side GTK/GNOME defaults. Kept separate from the host db
+# (files/system/etc/dconf) because the GUI container uses its own icon theme:
+# Tela-circle-dark ships in the GUI image, Papirus-Dark on the host. Without a
+# dconf system db here, gsettings inside the container returns the schema
+# defaults (Adwaita) and the shell resolves blurry legacy 16px fallbacks.
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+gtk-theme='Adwaita'
+icon-theme='Tela-circle-dark'
+font-name='Noto Sans Light 9'
+cursor-theme='Bibata-Modern-Classic'
+cursor-size=36
+
+# Cinnamon schemas (also used by nemo)
+[org/cinnamon/desktop/interface]
+gtk-theme='Adwaita'
+icon-theme='Tela-circle-dark'
+font-name='Noto Sans Light 9'
+cursor-theme='Bibata-Modern-Classic'
+cursor-size=36

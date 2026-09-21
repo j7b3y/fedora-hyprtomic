@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# GUI session entrypoint, run inside the GUI container by the host's
+# hyprtomic-gui-shell. Starts the container-side helpers that need the Wayland
+# session and then launches the shell.
+#
+# The quickshell config name is taken from HYPRTOMIC_QS_CONFIG (default: ii), so
+# a different dotfile set only has to ship ~/.config/quickshell/<name> and set
+# that variable (hyprtomic-gui-shell passes it through from the host env).
+set -uo pipefail
+
+QS_CONFIG="${HYPRTOMIC_QS_CONFIG:-ii}"
+
+# IME: fcitx5 runs in the container; host GTK/Qt apps reach it through the
+# shared session bus and the IME env vars exported by the Hyprland session.
+fcitx5 -d >/dev/null 2>&1 &
+
+# Clipboard history daemon (clipse; Super+V opens clipse-gui).
+command -v clipse >/dev/null 2>&1 && clipse -listen >/dev/null 2>&1 &
+
+# Clipboard history (cliphist + wl-clipboard live in the container) and notify
+# the shell's clipboard service. The IPC call is a no-op for configs that do not
+# expose a cliphistService.
+wl-paste --type text  --watch bash -c "cliphist store && qs -c '$QS_CONFIG' ipc call cliphistService update" &
+wl-paste --type image --watch bash -c "cliphist store && qs -c '$QS_CONFIG' ipc call cliphistService update" &
+
+exec qs -c "$QS_CONFIG"

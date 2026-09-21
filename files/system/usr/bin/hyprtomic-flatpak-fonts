@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Keep Chromium/Electron flatpaks able to see the host fonts.
+#
+# Why: flatpak >= 1.18 exposes host fonts to the sandbox only through
+# /run/host/font-dirs.xml, which uses <remap-dir> entries pointing at the
+# host-generated fontconfig caches (cache-9 on Fedora 44). Chromium and
+# Electron bundle their own newer fontconfig (cache-11); they cannot read
+# those caches and do not rescan remap-dir directories, so every host font
+# disappears and CJK text falls back to tofu while Latin still renders.
+#
+# Fix: a plain <dir> entry in the app's own fontconfig re-registers the host
+# font directories after the runtime's 50-flatpak.conf (user config wins), so
+# the bundled fontconfig scans the fonts and builds its own caches. Restart
+# the affected app afterwards.
+#
+# Run at session start by hyprtomic-gui-shell, or manually:
+#   hyprtomic-flatpak-fonts
+#   ujust fix-flatpak-fonts
+set -uo pipefail
+
+command -v flatpak >/dev/null 2>&1 || exit 0
+
+MARKER="HyprTomic flatpak font fix"
+
+for app in $(flatpak list --app --columns=application 2>/dev/null); do
+    meta="$(flatpak info --show-metadata "$app" 2>/dev/null)" || continue
+    case "$meta" in
+        # Chromium- and Electron-based apps bundle their own fontconfig.
+        *"base=app/org.chromium."*|*"base=app/org.electronjs."*) ;;
+        *) continue ;;
+    esac
+
+    conf="$HOME/.var/app/$app/config/fontconfig/fonts.conf"
+
+    if [ -e "$conf" ]; then
+        if grep -q "$MARKER" "$conf" 2>/dev/null; then
+            continue
+        fi
+        echo "flatpak-fonts: $app has a custom fonts.conf, leaving it alone" >&2
+        continue
+    fi
+
+    install -d "$(dirname "$conf")"
+    cat > "$conf" << EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <!-- $MARKER: make the bundled fontconfig scan the host fonts itself. -->
+  <dir>/run/host/fonts</dir>
+  <dir>/run/host/local-fonts</dir>
+  <dir>/run/host/user-fonts</dir>
+</fontconfig>
+EOF
+    echo "flatpak-fonts: fixed $app (restart the app to apply)"
+done
+
+exit 0

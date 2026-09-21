@@ -1,0 +1,22 @@
+[Groups/0]
+# Group Name
+Name=Default
+# Layout (JIS)
+Default Layout=jp
+# Default Input Method
+DefaultIM=keyboard-jp
+
+[Groups/0/Items/0]
+# Name
+Name=keyboard-jp
+# Layout
+Layout=
+
+[Groups/0/Items/1]
+# Name
+Name=mozkey-ibg
+# Layout
+Layout=
+
+[GroupOrder]
+0=Default

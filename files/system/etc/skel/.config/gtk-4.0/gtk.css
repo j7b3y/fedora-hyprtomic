@@ -1,0 +1,75 @@
+/*
+ * GTK4 named-color overrides for the default md3-cobalt-night palette.
+ * Keep in sync with ~/.config/quickshell/ii/Theme.qml and
+ * ~/.config/quickshell/ii/scripts/apply-theme.sh (regenerates this on theme switch).
+ */
+
+@define-color accent_color #9BBDE8;
+@define-color accent_bg_color #9BBDE8;
+@define-color accent_fg_color #0F1117;
+@define-color destructive_bg_color #4A2030;
+@define-color destructive_fg_color #F5D8DE;
+@define-color destructive_color #F2A8B8;
+@define-color success_bg_color #374B3E;
+@define-color success_fg_color #D1E9D6;
+@define-color success_color #B5CCBA;
+@define-color warning_bg_color #4A3A20;
+@define-color warning_fg_color #F0E8D0;
+@define-color warning_color #F2D479;
+
+@define-color window_bg_color #0F1117;
+@define-color window_fg_color #E0E2F0;
+@define-color headerbar_bg_color #252740;
+@define-color headerbar_fg_color #E0E2F0;
+@define-color headerbar_backdrop_color #1A1C28;
+@define-color headerbar_backdrop_fg_color #8E90A8;
+@define-color card_bg_color #1A1C28;
+@define-color card_fg_color #E0E2F0;
+@define-color popover_bg_color #2E3148;
+@define-color popover_fg_color #E0E2F0;
+@define-color dialog_bg_color #252740;
+@define-color dialog_fg_color #E0E2F0;
+@define-color view_bg_color #0F1117;
+@define-color view_fg_color #E0E2F0;
+@define-color sidebar_bg_color #252740;
+@define-color sidebar_fg_color #E0E2F0;
+@define-color sidebar_backdrop_color #1A1C28;
+@define-color sidebar_backdrop_fg_color #8E90A8;
+@define-color secondary_sidebar_bg_color #1A1C28;
+@define-color secondary_sidebar_fg_color #E0E2F0;
+@define-color sidebar_row_active_bg_color #1E3058;
+@define-color sidebar_row_active_fg_color #C8D8F5;
+@define-color thumbnail_bg_color #3A3E60;
+@define-color thumbnail_fg_color #E0E2F0;
+@define-color outline #404460;
+@define-color outline_strong #3A3E60;
+
+/* Material-style roles (used by libadwaita widgets) */
+@define-color surface_container_lowest #0F1117;
+@define-color surface_container_low #1A1C28;
+@define-color surface_container #252740;
+@define-color surface_container_high #2E3148;
+@define-color surface_container_highest #3A3E60;
+@define-color on_surface #E0E2F0;
+@define-color on_surface_variant #8E90A8;
+@define-color surface_variant #252740;
+@define-color inverse_surface #E0E2F0;
+@define-color inverse_on_surface #0F1117;
+@define-color inverse_primary #B0C8F0;
+
+* {
+  caret-color: @accent_color;
+}
+
+window {
+  background: @window_bg_color;
+}
+
+/* Rounded pills to match the shelf / control-center language */
+.text-button,
+button,
+popover.background > contents,
+.navigation-sidebar row,
+switch slider {
+  border-radius: 999px;
+}

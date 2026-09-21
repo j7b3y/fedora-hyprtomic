@@ -1,0 +1,10 @@
+Vendored Kvantum theme: "catppuccin-mocha-blue"
+
+Upstream: https://github.com/catppuccin/kvantum
+Author: Catppuccin project (theme file header: "author=elkrien based on Arc Dark style")
+
+This directory (files/system/etc/skel/.config/Kvantum/catppuccin-mocha-blue/)
+contains the kvconfig + SVG asset of the Catppuccin Kvantum theme, licensed
+under the GNU General Public License version 3.
+
+Full license text: https://www.gnu.org/licenses/gpl-3.0.txt

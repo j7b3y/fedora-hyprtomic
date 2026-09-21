@@ -115,21 +115,28 @@ shell start.
 | File | Managed? | Purpose |
 |---|---|---|
 | `hyprland.lua` | yes (skel) | Defaults: monitors, gaps, animations, keybinds, window rules, autostart. Do not edit by hand — it is replaced by `overwrite=1`. |
-| `local.conf` | **no** (never shipped) | Machine-specific overrides. Loaded only when present, so it survives every `sync-skel-config`, including `overwrite=1`. |
+| `local.conf` | **no** (never shipped) | Machine-specific overrides. Loaded only when present, so it survives every `sync-skel-config`, including `overwrite=1`. Executed as the **last** step of `hyprland.lua`, so it wins over the defaults. |
 | `monitors.lua` / `workspaces.lua` | generated (nwg-displays) | Monitor layout and workspace → output assignments written by the `nwg-displays` GUI. Loaded when present, **before** `local.conf`, so a manual override still wins. Delete them to go back to auto-detection. |
 | `theme.lua` | generated | Border colours written by `apply-theme.sh`; do not edit. |
 | `layouts/quadgrid.lua` | yes (skel) | Custom 2×2 tiling layout; register/apply per monitor via rules. |
 
-`local.conf` is plain Lua, executed by `hyprland.lua` at startup. It can either
-return a table of the supported knobs or call the Hyprland API directly:
+`local.conf` is plain Lua, executed by `hyprland.lua` as the very last step, so
+whatever it does wins over the defaults. The `hl` API is available, so monitors,
+window rules and keybinds can be added or overridden here:
 
 ```lua
 -- ~/.config/hypr/local.conf
--- Machine-specific overrides are plain Lua executed by hyprland.lua; the `hl`
--- API is available, so monitors, window rules and keybinds can be added here.
+-- Machine-specific overrides are plain Lua executed by hyprland.lua after all
+-- defaults; the `hl` API is available.
 -- hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
 -- hl.window_rule({ name = "my-rule", match = { class = "^Steam$" }, float = true })
 -- hl.bind("SUPER + G", hl.dsp.exec_cmd("flatpak run com.spotify.Client"), { desc = "Spotify" })
+--
+-- Replacing a default keybind (e.g. open Brave instead of Firefox on Super+C)
+-- needs an explicit unbind first: Hyprland runs *every* bind matching the keys,
+-- so a second hl.bind alone would fire both actions.
+-- hl.unbind("SUPER + C")
+-- hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = "ブラウザ" })
 ```
 
 Keep machine-specific settings out of skel (this is the whole point of

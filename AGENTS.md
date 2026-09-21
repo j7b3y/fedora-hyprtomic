@@ -97,7 +97,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 
 | Expectation | Detail |
 |---|---|
-| Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel). The GUI container's `nwg-displays` writes `monitors.lua`/`workspaces.lua`; `hyprland.lua` requires them when present (before `local.conf`, so manual overrides win). |
+| Hyprland config | `~/.config/hypr/hyprland.lua` (Lua). It starts the GUI container with `hyprtomic-gui-shell` (autostart). `finalize.sh` deletes wayblue's stale `/etc/skel/.config/hypr/hyprland.conf`. Machine-specific overrides go in `~/.config/hypr/local.conf` (Lua, **not** shipped in skel), which `hyprland.lua` executes **last** so it wins over the defaults; overriding a default keybind needs `hl.unbind(keys)` first (a second `hl.bind` would leave both actions active). The GUI container's `nwg-displays` writes `monitors.lua`/`workspaces.lua`; `hyprland.lua` requires them when present (before `local.conf`, so manual overrides win). |
 | SDDM login | `/etc/pam.d/sddm` (shipped) is password-first with a fingerprint fallback: `pam_exec` + `/usr/libexec/hyprtomic/pam-fingerprint-gate` skips `pam_fprintd` when a password was submitted, otherwise `pam_fprintd` (10s, 2 tries) runs before `password-auth`. `fprintd`/`fprintd-pam` ship on the host. The theme is the upstream astronaut theme overlaid from `files/system/usr/share/hyprtomic/sddm/` by `install-sddm-theme.sh`; `Components/LoginForm.qml` there is a copy of upstream plus the `FingerprintStatus` line — refresh it when upstream changes the form. |
 | Lock screen | `~/.config/hypr/hyprlock.conf` (skel) enables hyprlock's own fprintd support (`auth:fingerprint:enabled`) and shows `$FPRINTPROMPT` under the input field; `/etc/pam.d/hyprlock` (shipped) uses `password-auth` on purpose so PAM's `pam_fprintd` (authselect `with-fingerprint`, only in `system-auth`) cannot fight hyprlock for the reader. The container's hyprlock shares the config and reaches the host's fprintd over the shared system bus. |
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
@@ -257,6 +257,7 @@ End-to-end: on a test machine, update the host image, reboot, run
 - The GUI container package lists (`files/gui-build/scripts/gui-*.sh`) match
   this set (quickshell + Qt6 + clipse/hypremoji/rofi/fcitx5). Trim/extend them
   as the dotfiles evolve.
-- Real-machine specifics (primary monitor, quadgrid workspace rules, extra
-  binds) belong in `~/.config/hypr/local.conf` — never in skel, so they survive
-  `overwrite=1` re-syncs.
+- Real-machine specifics (primary monitor, quadgrid workspace rules, extra binds,
+  rebinding a default via `hl.unbind` + `hl.bind`) belong in
+  `~/.config/hypr/local.conf` — never in skel, so they survive `overwrite=1`
+  re-syncs.

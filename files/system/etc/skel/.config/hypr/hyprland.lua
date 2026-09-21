@@ -6,9 +6,14 @@
 --
 -- 固有設定 (machine-specific): このファイルは既定動作 (モニタ自動検出など) を
 -- そのまま提供する。実機固有の設定が必要な場合は ~/.config/hypr/local.conf を用意する。
+-- local.conf is executed LAST (see the bottom of this file), so it overrides any
+-- default above (monitor / workspace / window rules, keybinds, env, colours).
 --   例) hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
---       hl.window_rule(...) / hl.bind(...)
---       → ファイル内で直接実行してモニタ / ワークスペースルール / キーバインドを追加
+--       hl.window_rule(...)
+-- To replace a default keybind, unbind it first -- binding the same keys again
+-- would leave both actions active:
+--   hl.unbind("SUPER + C")
+--   hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = "ブラウザ" })
 -- local.conf は /etc/skel に同梱しない (overwrite=1 同期で上書きされないよう)。
 
 -- Monitor - auto detect (local.conf で上書き可能)
@@ -25,7 +30,6 @@ local fileManager = "nemo"
 local menu        = "hyprtomic-gui-shell ipc call launcher toggle"
 local mainMod     = "SUPER"
 
--- Machine-specific overrides: ~/.config/hypr/local.conf (loaded when present).
 local _HOME = os.getenv("HOME") or ""
 local function _exists(p)
     local f = io.open(p, "r")
@@ -46,13 +50,6 @@ if _exists(_HOME .. "/.config/hypr/workspaces.lua") then
     local ok = pcall(require, "workspaces")
     if not ok then
         hl.notification.create({ text = "hypr: ~/.config/hypr/workspaces.lua failed to load; skipping", duration = 5000 })
-    end
-end
-
-if _exists(_HOME .. "/.config/hypr/local.conf") then
-    local ok = pcall(dofile, _HOME .. "/.config/hypr/local.conf")
-    if not ok then
-        hl.notification.create({ text = "hypr: ~/.config/hypr/local.conf failed to load; using defaults", duration = 5000 })
     end
 end
 
@@ -496,3 +493,16 @@ hl.layer_rule({ name = "shelf",              match = { namespace = "quickshell:s
 hl.layer_rule({ name = "launcher",           match = { namespace = "quickshell:launcher" },       blur = false, ignore_alpha = 0.5 })
 hl.layer_rule({ name = "volume-osd",         match = { namespace = "quickshell:volume-osd" },     blur = false, ignore_alpha = 0.5 })
 hl.layer_rule({ name = "rofi",               match = { namespace = "rofi" },                      blur = true,  ignore_alpha = 0.2 })
+
+-- Machine-specific overrides: ~/.config/hypr/local.conf (loaded when present).
+-- Executed last on purpose, so local.conf wins over every default above.
+-- Overriding a default keybind needs an explicit unbind: Hyprland runs every
+-- bind matching the keys, so a second hl.bind alone would fire both actions.
+--   hl.unbind("SUPER + C")
+--   hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = "ブラウザ" })
+if _exists(_HOME .. "/.config/hypr/local.conf") then
+    local ok = pcall(dofile, _HOME .. "/.config/hypr/local.conf")
+    if not ok then
+        hl.notification.create({ text = "hypr: ~/.config/hypr/local.conf failed to load; using defaults", duration = 5000 })
+    end
+end

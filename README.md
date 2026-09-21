@@ -1,308 +1,212 @@
 # HyprTomic &nbsp; [![host image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml) [![gui image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml)
 
-A personal Fedora Atomic desktop image with a split architecture:
+Fedora Atomic（wayblue ベース）の **ホスト** と、Arch Linux の **GUI コンテナ**（distrobox）を組み合わせた個人向け Hyprland デスクトップイメージです。
+GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポジタとシステムサービスだけを持ちます。
 
-| Layer | What it is | Built from |
+| レイヤ | 中身 | イメージ |
 |---|---|---|
-| **Host** | Fedora Atomic (wayblue base) + Hyprland/SDDM session, system services and CLI tools | `recipes/recipe.yml` → `ghcr.io/j7b3y/fedora-hyprtomic:latest` |
-| **GUI container** | Arch Linux distrobox container with the GUI foundation (quickshell, Qt6) and the GUI apps | `recipes/gui.yml` → `ghcr.io/j7b3y/hyprtomic-gui:latest` |
-| **Dotfiles** | Baked into `/etc/skel`, synced into `$HOME` with a `ujust` recipe | `files/system/etc/skel/**` |
+| **ホスト** | Fedora Atomic + Hyprland / SDDM / システムサービス / CLI | `ghcr.io/j7b3y/fedora-hyprtomic:latest` |
+| **GUIコンテナ** | Arch Linux distrobox（quickshell, Qt6, GUIアプリ, IME, クリップボード） | `ghcr.io/j7b3y/hyprtomic-gui:latest` |
+| **dotfiles** | `/etc/skel` に同梱。`ujust sync-skel-config` で `$HOME` へ | `files/system/etc/skel/**` |
 
-`$HOME` is shared between host and container, so the same dotfiles serve both
-sides. The GUI shell itself (quickshell) runs inside the container; the
-compositor and the system services run on the host.
+`$HOME` はホストとコンテナで共有されるため、同じ dotfiles が両側で使われます。
 
-Session flow:
+セッションの流れ:
 
-1. SDDM starts the Hyprland session on the host.
-2. `~/.config/hypr/hyprland.lua` runs `hyprtomic-gui-shell` on `hyprland.start`.
-3. `hyprtomic-gui-shell` creates/updates the `hyprtomic-gui` distrobox container,
-   exports GUI helpers (fuzzel, wlogout, clipse, hypremoji, hyprbind, rofi, …)
-   to `~/.local/bin`, and starts `hyprtomic-gui-session` inside the container.
-4. `quickshell` (config name `ii`) draws the shelf, launcher, control center,
-   notifications, OSD and power menu.
+1. SDDM がホストで Hyprland を起動
+2. `~/.config/hypr/hyprland.lua` が `hyprtomic-gui-shell` を実行
+3. `hyprtomic-gui-shell` が `hyprtomic-gui` コンテナを作成/更新し、GUI ヘルパーを `~/.local/bin` にエクスポートしてコンテナ内のセッションを開始
+4. コンテナ内の `quickshell`（設定名 `ii`）がシェル（バー/ランチャー/通知/OSD）を描画
 
-Bridges between host and container:
+ホストとコンテナの橋渡し:
 
-- Container → host command: `distrobox-host-exec <cmd>` (flatpak launches,
-  power actions, host CLI helpers).
-- Host **system** D-Bus: distrobox only shares the user session bus, so the GUI
-  session sets `DBUS_SYSTEM_BUS_ADDRESS`
-  (`unix:path=/run/host/run/dbus/system_bus_socket`) to reach the host's BlueZ
-  and NetworkManager.
-- Container → host entry point: `distrobox enter hyprtomic-gui`.
-- GUI apps are not installed on the host; run them from the container (or
-  through the exported wrappers).
+- コンテナ → ホスト: `distrobox-host-exec <cmd>`（flatpak の起動、電源操作、ホストのコマンド）
+- コンテナ → ホストの **システム** D-Bus: `DBUS_SYSTEM_BUS_ADDRESS` を `/run/host/run/dbus/system_bus_socket` に向けて、コンテナから BlueZ / NetworkManager を操作
+- コンテナへ入る: `distrobox enter hyprtomic-gui`
+- GUI アプリはホストに入れない（コンテナ内 or エクスポートされたラッパー経由で起動）
 
-## What you get
+## できること
 
-- **Shelf** (bottom bar): launcher button on the left (opens the quickshell
-  launcher), a 1–10 workspace
-  pager with per-workspace app icons in the center, and
-  `[system tray][wifi/bt/battery/volume][clock]` on the right. The clock shows
-  `yyyy-MM-dd HH:mm`.
-- **Launcher**: two single-line filter rows above the app grid — launch
-  source/container (`All`, the GUI container, `Flatpak`, other distroboxes,
-  `Host`) and app category — both scroll sideways when they overflow. Apps from
-  the other distroboxes (e.g. `develop`, `game`) are registered by
-  `hyprtomic-distrobox-apps` at session start (`ujust refresh-distrobox-apps`
-  re-runs it) and launch through the host's `distrobox-enter`.
-- **Control center** (bottom-right hot strip, click or hover; `Super+A`):
-  Wi-Fi, Bluetooth, airplane mode, theme switcher, volume + output device
-  selector, brightness.
-- **Theming**: `apply-theme.sh` keeps Hyprland borders, GTK3/4, Qt (qt6ct +
-  Kvantum), ghostty, rofi and the shell palette in sync. Six md3 themes ship in
-  `Theme.qml`; switching is done from the control center. Icons are
-  Tela-circle-dark in the GUI container (the launcher and container GTK/Qt
-  apps) and Papirus-Dark on the host.
-- **Notifications / OSD / power menu** owned by quickshell: volume OSD, volume
-  keys, `Super+Delete` power menu (shutdown / reboot / lock / suspend — power
-  actions are forwarded to the host). Notifications keep an unread history:
-  the shelf's right end has a bell with an unread badge that opens the
-  notification center, and the history is persisted across restarts.
-- **IME + clipboard**: fcitx5 with the Mozkey IbG engine and `clipse` run in the
-  container (`Super+V` clipboard history, `Super+.` emoji picker).
-- **Flatpaks** are managed on the host (system scope). Their desktop entries are
-  visible to the container launchers, and the shell starts them through
-  `distrobox-host-exec flatpak run …` so they use the host's sandbox.
-- **Audio / network / Bluetooth**: PipeWire, NetworkManager and BlueZ run on the
-  host; the container talks to them through the shared session bus / host system
-  bus.
+- **シェル**（quickshell, 画面下）: 左のランチャーボタン、中央の 1〜10 ワークスペースページャ、右に `[トレイ][Wi-Fi/BT/バッテリー/音量][時計]`。
+- **ランチャー**: アプリ一覧の上に「コンテナ（All / hyprtomic-gui / Flatpak / 他の distrobox / Host）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します（`ujust refresh-distrobox-apps` で再登録）。
+- **コントロールセンター**: Wi-Fi / Bluetooth / 機内モード / テーマ切替 / 音量 / 輝度。
+- **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
+- **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。
+- **Flatpak**: ホスト側（system）で管理。ランチャーからは `distrobox-host-exec flatpak run …` 経由で起動。
+- **テーマ**: `apply-theme.sh` が Hyprland / GTK3/4 / Qt（qt6ct + Kvantum）/ ghostty / rofi / シェル配色を同期。6 種類の md3 テーマをコントロールセンターから切替。アイコンはコンテナが Tela-circle-dark、ホストが Papirus-Dark。
+- **オーディオ / ネットワーク / Bluetooth**: PipeWire・NetworkManager・BlueZ はホスト側。
 
-## Installation
+## インストール
 
 > [!WARNING]
-> [Ostree native containers are experimental](https://www.fedoraproject.org/wiki/Changes/OstreeNativeContainerStable) — use at your own discretion.
+> [Ostree native containers are experimental](https://www.fedoraproject.org/wiki/Changes/OstreeNativeContainerStable) — 利用は自己責任で。
 
-To rebase an existing Fedora Atomic installation to the latest build:
+### 既存の Fedora Atomic から rebase する
 
 ```bash
-rpm-ostree rebase ostree-unverified-registry:ghcr.io/j7b3y/fedora-hyprtomic:latest
+sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/j7b3y/fedora-hyprtomic:latest
 systemctl reboot
-rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest
+# 再起動後、署名付きに切り替え
+sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest
 systemctl reboot
 ```
 
-## First boot
+### ISO を作ってインストールする
+
+[BlueBuild CLI](https://github.com/blue-build/cli) が必要です（どちらかで導入）:
 
 ```bash
-ujust sync-skel-config                # copy /etc/skel into $HOME (skips existing files)
-ujust overwrite=1 sync-skel-config    # replace managed files and prune removed ones, then re-login
+cargo install --locked blue-build
+# または
+bash <(curl -s https://raw.githubusercontent.com/blue-build/cli/main/install.sh)
 ```
-
-The GUI container is created automatically by `hyprtomic-gui-shell` on the
-first login; it can also be managed explicitly:
 
 ```bash
-ujust gui-container-setup             # create + initialize the container
-ujust gui-container-update            # recreate from the latest image
-ujust gui-container-reset             # same as update, explicit
-ujust gui-container-status            # show container state
-ujust refresh-distrobox-apps          # re-register other containers' apps
-hyprtomic-gui-shell status            # same, via the CLI
+# 公開済みイメージから ISO を生成
+sudo bluebuild generate-iso \
+  --iso-name fedora-hyprtomic.iso \
+  -V server \
+  image ghcr.io/j7b3y/fedora-hyprtomic:latest
+
+# 手元のレシピからビルドして ISO にする場合（イメージビルドも走るので時間がかかる）
+sudo bluebuild generate-iso \
+  --iso-name fedora-hyprtomic.iso \
+  -V server \
+  recipe recipes/recipe.yml
 ```
 
-Session logs: `~/.local/state/hyprtomic/gui-session.log` (quickshell output) and
-`/run/user/$UID/quickshell/by-id/*/log.qslog` (details).
+- `-V` / `--variant` は **インストーラーの種類** です。
+  - `kinoite`（既定・推奨）: インストール前にユーザーとパスワードを設定
+  - `silverblue`: 初回起動時にユーザーとパスワードを設定
+  - `server`: 素の Anaconda。インストール時にユーザーを作成
+- 出力先は `-o ./output` で変更できます。生成した ISO は Fedora Media Writer などで USB に書き込んで起動してください。
 
-## Updating
+## 初回起動
 
 ```bash
-rpm-ostree upgrade && systemctl reboot   # host image
-ujust gui-container-update               # GUI container image (after a new gui build)
+# 1. SDDM でパスワードでログイン
+#    指紋ログインを使いたい場合は、ログイン後にホストの端末で登録
+ujust enroll-fingerprint          # 任意: 右人差し指を登録（引数を変えれば他の指も）
+
+# 2. dotfiles を $HOME へ展開（既存ファイルはスキップ）
+ujust sync-skel-config
+
+# 3. 再ログインすると Hyprland 設定と quickshell シェルが有効になる
 ```
 
-Dotfiles only change when the **host image** is updated (they live in
-`/etc/skel`), so after a host upgrade re-run `ujust overwrite=1 sync-skel-config`
-and re-login to pick them up. The theme is re-applied automatically on every
-shell start.
+- GUI コンテナ（`hyprtomic-gui`）は初回ログイン時に `hyprtomic-gui-shell` が自動で作成します。イメージ取得と初期セットアップで数分かかります。進捗とエラーは `~/.local/state/hyprtomic/gui-session.log` に記録されます。
+- 手動で作成/確認したいときは `ujust gui-container-setup` / `ujust gui-container-status`。
 
-## Configuration
+### btrfs を zstd 圧縮にする（任意）
 
-### Hyprland (`~/.config/hypr/`)
+インストール直後は btrfs の圧縮が無効です。`/etc/fstab` の root 行に `compress=zstd:5` を追加して再起動すると、書き込みが透過的に圧縮されます（ostree が展開する `/usr` は元から圧縮済みなので、効果が大きいのは `/var` や `/etc` 以下です）。
 
-| File | Managed? | Purpose |
-|---|---|---|
-| `hyprland.lua` | yes (skel) | Defaults: monitors, gaps, animations, keybinds, window rules, autostart. Do not edit by hand — it is replaced by `overwrite=1`. |
-| `local.conf` | **no** (never shipped) | Machine-specific overrides. Loaded only when present, so it survives every `sync-skel-config`, including `overwrite=1`. Executed as the **last** step of `hyprland.lua`, so it wins over the defaults. |
-| `monitors.lua` / `workspaces.lua` | generated (nwg-displays) | Monitor layout and workspace → output assignments written by the `nwg-displays` GUI. Loaded when present, **before** `local.conf`, so a manual override still wins. Delete them to go back to auto-detection. |
-| `theme.lua` | generated | Border colours written by `apply-theme.sh`; do not edit. |
-| `layouts/quadgrid.lua` | yes (skel) | Custom 2×2 tiling layout; register/apply per monitor via rules. |
+```bash
+# root 行を次の形にする
+#   UUID=xxxx / btrfs subvol=root,compress=zstd:5,ro 0 0
+sudo nano /etc/fstab
+sudo systemctl daemon-reload
+sudo systemctl reboot
 
-`local.conf` is plain Lua, executed by `hyprland.lua` as the very last step, so
-whatever it does wins over the defaults. The `hl` API is available, so monitors,
-window rules and keybinds can be added or overridden here:
+# 反映確認（/sysroot, /var, /etc のオプションに compress=zstd:5 が付く）
+findmnt -no OPTIONS /sysroot
+
+# 既存ファイルも圧縮したい場合（任意・時間がかかる）
+sudo btrfs filesystem defragment -r -czstd /var
+```
+
+## 更新
+
+```bash
+# ホストイメージ（dotfiles も /etc/skel 経由で更新される）
+sudo rpm-ostree upgrade && systemctl reboot
+
+# ホスト更新後: dotfiles を $HOME へ反映して再ログイン
+ujust overwrite=1 sync-skel-config
+
+# GUI コンテナイメージを更新（新しい gui ビルド公開後）
+ujust gui-container-update
+```
+
+- `ujust sync-skel-config` は `/etc/skel` → `$HOME` へのコピーです。既定では既存ファイルをスキップします。
+- `overwrite=1` を付けると、イメージ管理下のファイルを置き換え、前回の同期で入れたのにイメージから消えたファイルを削除します。`~/.config/hypr/local.conf` や `~/.local` の個人データは消えません。
+- GUI コンテナをゼロから作り直す: `ujust gui-container-reset` / 状態確認: `ujust gui-container-status`。
+- その他: `ujust refresh-distrobox-apps`（他コンテナのアプリ再登録）、`ujust fix-flatpak-fonts`（Chromium 系 flatpak の日本語フォント修正）。
+
+## 基本操作（キー）
+
+- `Super+Q` … ターミナル（ghostty）
+- `Super+/` … **HyprBind**（キーバインド一覧ビューア）
+
+ランチャー・コントロールセンター・スクリーンショットなど、他の操作は HyprBind で検索して確認できます。
+
+## 設定メモ
+
+### マシン固有の設定（local.conf）
+
+`~/.config/hypr/local.conf` はイメージに含まれないファイルで、`hyprland.lua` の **最後** に読み込まれます。ここに書いた設定が既定より優先されます。
 
 ```lua
 -- ~/.config/hypr/local.conf
--- Machine-specific overrides are plain Lua executed by hyprland.lua after all
--- defaults; the `hl` API is available.
--- hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
--- hl.window_rule({ name = "my-rule", match = { class = "^Steam$" }, float = true })
--- hl.bind("SUPER + G", hl.dsp.exec_cmd("flatpak run com.spotify.Client"), { desc = "Spotify" })
---
--- Replacing a default keybind (e.g. open Brave instead of Firefox on Super+C)
--- needs an explicit unbind first: Hyprland runs *every* bind matching the keys,
--- so a second hl.bind alone would fire both actions.
--- hl.unbind("SUPER + C")
--- hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = "ブラウザ" })
+-- モニタ（自動検出を上書き）
+hl.monitor({ output = "DP-1", mode = "preferred", position = "0x0", scale = 1.0 })
+
+-- 既定キーバインドの差し替えは unbind してから bind
+-- （同じキーに hl.bind を重ねると両方実行されるため）
+hl.unbind("SUPER + C")
+hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = "ブラウザ" })
 ```
 
-Keep machine-specific settings out of skel (this is the whole point of
-`local.conf`): the sync recipe prunes anything that the image no longer ships,
-but never touches `local.conf`.
+- モニタ配置は GUI の `nwg-displays`（ランチャーから起動）でも設定でき、`monitors.lua` / `workspaces.lua` に保存されます。削除すれば自動検出に戻ります。
+- `local.conf` は `overwrite=1` の同期でも消えないので、マシン固有の設定はすべてここへ。
 
-**Monitor arrangement (GUI):** `nwg-displays` ships in the GUI container and is
-exported to the host PATH, so it can be started from the launcher, rofi or a
-terminal. Drag the displays, set mode/scale/rotation and press *Apply* — it
-writes `~/.config/hypr/monitors.lua` (+ `monitors.conf`) and reloads Hyprland.
-The Hyprland config loads `monitors.lua`/`workspaces.lua` when present (before
-`local.conf`), so the layout survives restarts. Delete those files to fall back
-to auto-detection.
+### テーマとアイコン
 
-### Login screen (SDDM)
+- テーマ切替はコントロールセンターのテーマページから。`apply-theme.sh` が Hyprland / GTK / Qt(Kvantum) / ghostty / rofi に反映します。
+- アプリ個別のアイコンを差し替えたい場合は `~/.local/share/hyprtomic/app-icons/<icon-name>.svg|png` に置いてください（テーマ検索より優先されます）。再ログインで反映。
 
-The astronaut theme is cloned at build time and overlaid from
-`files/system/usr/share/hyprtomic/sddm/` (`theme.conf`, wallpaper and the
-`Components/` QML overrides). The login policy itself lives in
-`/etc/pam.d/sddm`:
+### 環境変数
 
-- **Password first, fingerprint on empty submit.** `pam_exec` passes the
-  submitted password to `/usr/libexec/hyprtomic/pam-fingerprint-gate`. A
-  non-empty password makes the stack skip `pam_fprintd` and verifies the
-  password as before — a typed password never waits for the reader. An empty
-  password fails the gate and starts `pam_fprintd`
-  (`timeout=10 max-tries=2`); if that fails or times out, the login fails and
-  the password can be typed and submitted again.
-- **Enrollment**: run `ujust enroll-fingerprint` (or `fprintd-enroll`) in a
-  host terminal; the daemon is D-Bus activated, there is no service to enable.
-  `fprintd-list` shows the enrolled fingers, `fprintd-delete` removes them.
-- **Feedback**: the theme shows the pam_fprintd messages (e.g.
-  “指紋読取装置に指を置いてください”, “検証がタイムアウトしました”) below the
-  password field, and the empty password field hints at the flow via
-  `TranslatePlaceholderPassword` in `theme.conf`.
-- **Caveat**: fingerprint logins pass an empty password to the session, so
-  gnome-keyring/KWallet are not unlocked; use the password when a keyring is
-  needed.
-- **Tuning**: adjust `timeout=`/`max-tries=` on the `pam_fprintd.so` line.
-  `/etc/pam.d/sddm` is a copy of the sddm package's PAM file plus the
-  fingerprint lines, so re-check it after a Fedora/sddm update. authselect's
-  `with-fingerprint` feature only patches `system-auth` (sudo, TTY, hyprlock),
-  which is why SDDM needs its own copy.
-
-### Lock screen (hyprlock)
-
-hyprlock does not use PAM for fingerprints: it talks to fprintd itself, in
-parallel with the password field, and only when enabled in
-`~/.config/hypr/hyprlock.conf` (shipped) via `auth:fingerprint:enabled`
-(`auth { fingerprint { enabled = true } }`). The `$FPRINTPROMPT` label below the
-input field shows the scan hint and stays empty when fingerprint auth is off or
-unavailable, so nothing changes on machines without a reader or enrolled
-prints.
-
-- **Password path**: `/etc/pam.d/hyprlock` is shipped with `password-auth` on
-  purpose. The hyprlock package's `auth include login` would inherit
-  `system-auth`, whose `pam_fprintd` (authselect's `with-fingerprint`) fights
-  hyprlock for the reader and makes typed passwords wait for the fingerprint
-  timeout.
-- **Container**: the power menu's lock runs the container's hyprlock with the
-  same config; it reaches the host's fprintd through the shared system bus and
-  falls back to the password if that is not possible.
-- **Disable**: set `auth:fingerprint:enabled = false` (or drop the block) for
-  password-only unlocking.
-
-### Shell (`~/.config/quickshell/ii/`)
-
-- `Theme.qml` + `current-theme`: the theme table and the saved selection. The
-  control center's theme page writes `current-theme` and runs
-  `scripts/apply-theme.sh <theme>`; the same script runs on every shell start.
-- `scripts/apply-theme.sh` owns every generated file (GTK/Qt/Kvantum/ghostty/
-  rofi/Hyprland borders). Adding a theme means editing `Theme.qml` **and** the
-  `case` block in the script — see `AGENTS.md`.
-- `scripts/resolve-icons.py` resolves launcher/shelf icons through GTK
-  (Tela-circle-dark in the container; see `AGENTS.md` → "Where the theme is
-  consumed"). The launcher rasterizes SVG icons at 256px and keeps raster icons
-  at their natural size, so the theme icons stay sharp; flatpak/web-app icons
-  use their own artwork. If an app's own icon is low-resolution (some flatpak
-  exports max out at 128px, e.g. Firefox), drop a bigger
-  `~/.local/share/hyprtomic/app-icons/<icon-name>.svg|png` — it wins over the
-  theme lookup. Restart the shell (or re-login) to pick it up.
-- The shell config name can be changed with `HYPRTOMIC_QS_CONFIG` (passed
-  through by `hyprtomic-gui-shell`); the default is `ii`.
-
-### Container / environment overrides
-
-| Variable | Default | Meaning |
+| 変数 | 既定 | 意味 |
 |---|---|---|
-| `HYPRTOMIC_GUI_CONTAINER` | `hyprtomic-gui` | distrobox container name |
-| `HYPRTOMIC_GUI_IMAGE` | `ghcr.io/j7b3y/hyprtomic-gui:latest` | container image |
-| `HYPRTOMIC_QS_CONFIG` | `ii` | quickshell config directory name |
+| `HYPRTOMIC_GUI_CONTAINER` | `hyprtomic-gui` | distrobox コンテナ名 |
+| `HYPRTOMIC_GUI_IMAGE` | `ghcr.io/j7b3y/hyprtomic-gui:latest` | GUI コンテナイメージ |
+| `HYPRTOMIC_QS_CONFIG` | `ii` | quickshell 設定ディレクトリ名 |
 
-## Key bindings
+## クレジット
 
-`SUPER` is the main modifier. The full list is available with `Super+/`
-(hyprbind).
+- [oameye/atomic-hyprland](https://github.com/oameye/atomic-hyprland) — dotfiles と全体構成の参考元
+- [BlueBuild](https://blue-build.org/) — イメージのビルドと CI（recipe / modules）
+- [wayblue](https://github.com/wayblueorg/wayblue) — ホストのベースイメージ
+- [Universal Blue](https://universal-blue.org/) — ujust・flatpak まわりの基盤
+- [quickshell](https://quickshell.org/) / [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) — シェル（`ii`）の元
+- [Tela-circle](https://github.com/vinceliuice/Tela-circle-icon-theme)（アイコン）、[Bibata](https://github.com/ful1e5/Bibata_Cursor)（カーソル）、[Catppuccin](https://github.com/catppuccin/kvantum)（Kvantum テーマ）
 
-| Shortcut | Action |
+## リポジトリ構成
+
+| パス | 役割 |
 |---|---|
-| `Super+Q` / `Super+E` | Ghostty / Nemo |
-| `Super+C` / `Super+B` / `Super+M` | Firefox / Bitwarden / Mission Center (flatpaks) |
-| `Super+X` / `Super+F` | Close window / toggle floating |
-| `Super+Arrow` / `Super+Shift+Arrow` | Focus / move window |
-| `Super+1…0` / `Super+Shift+1…0` | Focus / move window to workspace 1–10 |
-| `Super+Tab`, `Super+[` `]`, `Super+wheel` | Previous / next workspace |
-| `Super+/` | Keybind viewer (hyprbind) |
-| `Super+Alt` (hold Super, tap Alt) or 変換 (`Henkan`) | App launcher (quickshell launcher) |
-| `Super+A` | Control center |
-| `Super+Delete` | Power menu |
-| `Super+L` | Lock (hyprlock) |
-| `Super+Escape` | Window switcher (rofi) |
-| `Super+V` / `Super+.` | Clipboard history / emoji picker |
-| `Super+Shift+S` / `Super+Ctrl+Shift+S` | Region screenshot → clipboard + file / file only |
-| `Super+Shift+P` | Colour picker |
-| `XF86Audio*` | Volume, mute, mic mute, media control |
+| `recipes/recipe.yml` | ホストイメージ: パッケージ、os-release、ビルドスクリプト、既定 flatpak |
+| `recipes/gui.yml` | GUI コンテナイメージ: パッケージレイヤとセッション用アセット |
+| `files/system/**` | ホストイメージの `/` へコピー（skel dotfiles、systemd ユニット、`hyprtomic-gui-shell`、SDDM アセット、ujust レシピ） |
+| `files/scripts/**` | ホストのビルド時スクリプト |
+| `files/gui-build/scripts/gui-*.sh` | GUI コンテナのビルドスクリプト（パッケージレイヤごと） |
+| `files/gui/**` | GUI コンテナの `/` へコピー（セッション起動スクリプト、dconf など） |
+| `AGENTS.md` | アーキテクチャ、dotfiles の統合契約、テーマの流れ、変更ルール |
 
-## Repository layout
+`docs/` と `opencode.json(c)` は意図的に gitignore しています。
 
-| Path | Purpose |
-|---|---|
-| `recipes/recipe.yml` | Host image: packages, os-release rebrand, build scripts, default flatpaks |
-| `recipes/gui.yml` | GUI container image: package layers + session assets |
-| `files/system/**` | Copied verbatim to `/` of the host image (skel dotfiles, systemd units, `hyprtomic-gui-shell`, SDDM assets, ujust recipe) |
-| `files/scripts/**` | Host build-time scripts (referenced by bare name from `recipe.yml`) |
-| `files/gui-build/scripts/gui-*.sh` | GUI container build scripts, one per package layer |
-| `files/gui/**` | Copied verbatim to `/` of the GUI container (session entrypoint, profile snippets) |
-| `AGENTS.md` | Architecture notes, dotfile integration contract, theming pipeline and change rules |
+## 検証
 
-`docs/` and `opencode.json(c)` are intentionally gitignored.
-
-## Known issues / notes
-
-- **Chromium/Electron flatpaks and CJK fonts**: flatpak ≥ 1.18 exposes host fonts
-  to the sandbox only through `/run/host/font-dirs.xml` `<remap-dir>` entries,
-  which reuse the host fontconfig caches (`cache-9`). Chromium and Electron
-  bundle a newer fontconfig (`cache-11`), cannot read those caches and do not
-  rescan the remapped directories, so every host font disappears — Latin still
-  renders (runtime fonts), Japanese becomes tofu. `hyprtomic-flatpak-fonts`
-  writes a per-app `~/.var/app/<app-id>/config/fontconfig/fonts.conf` with
-  plain `<dir>` entries; it runs on every session start and can be re-run with
-  `ujust fix-flatpak-fonts`. Restart the affected app afterwards. Firefox is
-  not affected (it uses the runtime fontconfig).
-- **Theming reach**: host fonts/themes are visible to the containers (distrobox
-  bind-mounts `/usr/share/{fonts,themes,icons}`), but assets installed *only* in
-  the GUI container are not visible to the host or other distroboxes. Flatpaks
-  see host fonts plus their per-app `xdg-config` permissions; Kvantum/Qt theming
-  cannot be shipped to flatpaks. See `AGENTS.md` → "Theming".
-- **`local.conf` is the escape hatch** for anything machine-specific; never rely
-  on hand-editing files that live in `/etc/skel`.
-
-## Verification
-
-These images are signed with [Sigstore](https://www.sigstore.dev/)'s
-[cosign](https://github.com/sigstore/cosign). Download `cosign.pub` from this
-repo and run:
+イメージは [Sigstore](https://www.sigstore.dev/) の [cosign](https://github.com/sigstore/cosign) で署名されています。このリポジトリの `cosign.pub` を使って確認できます:
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/j7b3y/fedora-hyprtomic
 cosign verify --key cosign.pub ghcr.io/j7b3y/hyprtomic-gui
 ```
+
+## 注意事項
+
+- **Chromium / Electron 系 flatpak の日本語フォント**: flatpak ≥ 1.18 ではホストのフォントがキャッシュ経由でしか見えず、同梱の新しい fontconfig がそれを読めないため日本語が豆腐になります。`hyprtomic-flatpak-fonts` がアプリごとの fontconfig を書き換えて修正します（セッション開始時に自動実行、`ujust fix-flatpak-fonts` で再実行）。該当アプリは再起動してください。Firefox は影響を受けません。
+- **テーマの到達範囲**: distrobox はホストの `/usr/share/{fonts,themes,icons}` を各コンテナに bind mount しますが、GUI コンテナだけに入れたアセットはホストや他コンテナからは見えません。Flatpak にはホストのフォントと per-app の `xdg-config` 権限しか渡らず、Kvantum/Qt テーマは配れません。
+- **`local.conf` が唯一の逃げ道**: `/etc/skel` 由来のファイルを直接編集しないでください。`overwrite=1` の同期で置き換わります。

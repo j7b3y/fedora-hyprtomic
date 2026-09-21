@@ -30,7 +30,7 @@ jobs:
       id-token: write
     steps:
       - name: Build GUI container
-        uses: blue-build/github-action@v1.11
+        uses: blue-build/github-action@v1.13
         with:
           recipe: gui.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}

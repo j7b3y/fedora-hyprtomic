@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Register the .desktop files of the other distrobox containers with the host's
 # application dirs, so the quickshell launcher inside the GUI container can
-# list and launch them. Runs on the host: hyprtomic-gui-shell calls it in the
-# background at session start, `ujust refresh-distrobox-apps` re-runs it.
+# list and launch them. Runs on the host:
+#
+#   - hyprtomic-distrobox-apps.service (systemd user unit) keeps it alive in
+#     --watch mode: containers that start after login are registered on the
+#     next poll, exports of removed containers are pruned;
+#   - hyprtomic-gui-shell runs a one-shot pass at session start (cheap
+#     fallback); `ujust refresh-distrobox-apps` triggers one manually.
 #
 # The GUI container only has distrobox-export/distrobox-host-exec (distrobox
 # injects those), not the `distrobox` CLI, so distrobox-export is told to prefix
@@ -16,6 +21,9 @@ set -uo pipefail
 CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 MARKER="X-HyprTomic-Container="
+# --watch: seconds between polls of the running-container list. `distrobox
+# list` is a cheap podman query, and the launcher picks new entries up live.
+WATCH_INTERVAL="${HYPRTOMIC_DISTROBOX_APPS_INTERVAL:-15}"
 
 log() { printf '%s\n' "$*"; }
 
@@ -45,6 +53,9 @@ running_container_names() {
 }
 
 # Export every visible .desktop file of one container (runs inside it).
+# stdin is /dev/null on purpose: `distrobox enter` must not consume whatever
+# feeds the caller (in sync() it used to eat the loop's container list, so only
+# the first container was ever registered).
 export_container() {
     local name="$1"
     timeout 120 distrobox enter "$name" -- \
@@ -61,7 +72,7 @@ export_container() {
                     distrobox-export --app "$f" >/dev/null 2>&1 || true
                 done
             done
-        ' 2>/dev/null
+        ' </dev/null 2>/dev/null
 }
 
 # Tag the files distrobox-export wrote for this container, so stale exports can
@@ -90,14 +101,16 @@ prune_stale() {
     done
 }
 
-main() {
-    command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 0; }
+# One registration pass over the running containers. Returns non-zero when it
+# skipped (no distrobox / no container list), so --watch retries.
+sync() {
+    command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 1; }
 
     local all running
     all="$(container_names)"
     # No container list means podman/distrobox is not answering; do not touch
     # anything (pruning would delete every export).
-    [ -n "$all" ] || { log "no containers reported; skipping"; return 0; }
+    [ -n "$all" ] || { log "no containers reported; skipping"; return 1; }
 
     mkdir -p "$APPS_DIR"
 
@@ -118,6 +131,37 @@ main() {
         update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
     fi
     log "done"
+}
+
+# --watch: stay alive for the whole session and re-sync whenever the set of
+# running containers changes. Stopped containers keep their entries; starting
+# one is enough to get its apps registered.
+watch() {
+    # Only one watcher: one started by hand (or a stale one from a previous
+    # login) must not stack.
+    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
+    mkdir -p "$state_dir"
+    exec 9>"$state_dir/distrobox-apps-watch.lock"
+    flock -n 9 || { log "another watcher is already running; exiting"; return 0; }
+
+    local last="" cur
+    while :; do
+        cur="$(running_container_names)"
+        # Re-sync on every change; last is only advanced on success, so a
+        # skipped sync (podman not answering yet) is retried.
+        if [ "$cur" != "$last" ] && sync; then
+            last="$cur"
+        fi
+        sleep "$WATCH_INTERVAL"
+    done
+}
+
+main() {
+    case "${1:-}" in
+        --watch) watch ;;
+        "") sync ;;
+        *) log "usage: hyprtomic-distrobox-apps [--watch]"; return 2 ;;
+    esac
 }
 
 main "$@"

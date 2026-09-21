@@ -180,7 +180,9 @@ case "${1:-}" in
         echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
         # Register the other distroboxes' .desktop files for the launcher
         # (background: entering each container takes a moment, and the shell
-        # picks the new entries up live). See hyprtomic-distrobox-apps.
+        # picks the new entries up live). hyprtomic-distrobox-apps.service
+        # covers containers started after login; this pass is the cheap
+        # fallback. See hyprtomic-distrobox-apps.
         /usr/bin/hyprtomic-distrobox-apps >>"$log" 2>&1 &
         exec distrobox enter "$CONTAINER" -- \
             env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \

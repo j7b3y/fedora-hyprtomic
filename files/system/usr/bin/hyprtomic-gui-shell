@@ -178,6 +178,10 @@ case "${1:-}" in
         log="$HOME/.local/state/hyprtomic/gui-session.log"
         mkdir -p "$(dirname "$log")"
         echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
+        # Register the other distroboxes' .desktop files for the launcher
+        # (background: entering each container takes a moment, and the shell
+        # picks the new entries up live). See hyprtomic-distrobox-apps.
+        /usr/bin/hyprtomic-distrobox-apps >>"$log" 2>&1 &
         exec distrobox enter "$CONTAINER" -- \
             env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \
             >>"$log" 2>&1

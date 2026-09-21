@@ -49,6 +49,9 @@ agent config must not be committed.
      DesktopEntries/icons see system flatpaks,
    - exports container GUI binaries to `~/.local/bin` (hypremoji, hyprbind,
      fuzzel, wlogout, swappy, hyprpicker, rofi, clipse-gui, clipse),
+   - registers the other distroboxes' `.desktop` files for the launcher in the
+     background (`hyprtomic-distrobox-apps`; `ujust refresh-distrobox-apps`
+     re-runs it),
    - builds the shell python venv (`~/.local/state/quickshell/.venv`) once,
    - passes the Wayland/Hyprland environment into the container and sets
      `XDG_DATA_DIRS` so DesktopEntries sees both container apps and host
@@ -103,8 +106,9 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
 | Terminal | The host ships `ghostty` (copr `scottames/ghostty`); its config falls back to a host CJK mono font (HackGen ships in the container only). The container keeps its own ghostty for shell actions, but its desktop entry is overridden in `/usr/local/share/applications/com.mitchellh.ghostty.desktop` to run `distrobox-host-exec ghostty`, so the launcher/rofi open the host terminal like `Super+Q`. |
 | Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. The shelf's left button and `Super+Alt` (or the Henkan key) open the quickshell launcher; the bell at the right end opens the notification center (unread badge; history persisted to `~/.cache/quickshell/notifications.json`, opening the center marks it read); `rofi` (container, exported) remains for the `Super+Escape` window switcher. |
+| Launcher sources | The launcher has two single-line filter rows (horizontal scroll): a container/launch-source row above the app categories. Sources: `Flatpak`, the GUI container (`CONTAINER_ID`), other distroboxes registered by `hyprtomic-distrobox-apps`, and `Host` (`distrobox-host-exec` entries). The exporter writes standard `~/.local/share/applications/<container>-*.desktop` files with `Exec=distrobox-host-exec distrobox-enter -n <c> -- …` (the GUI container has no `distrobox` CLI), tags them with `X-HyprTomic-Container=` and prunes exports of deleted containers. |
 | Clipboard / IME | `clipse` + `clipse-gui` (container AUR): the daemon is started by `hyprtomic-gui-session`, `Super+V` opens the GUI (exported). fcitx5 + mozkey-ibg-bin live in the container; the host env exports `GTK_IM_MODULE` / `QT_IM_MODULE` / `XMODIFIERS`. |
-| GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Papirus-Dark icons + Bibata-Modern-Classic cursor (baked into the dconf db). |
+| GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Bibata-Modern-Classic cursor (baked into the dconf db). Icons: Papirus-Dark on the host, Tela-circle-dark in the GUI container (see "Where the theme is consumed"). |
 | Python deps | The shell venv is built from `files/gui/usr/share/hyprtomic/uv-requirements.txt` (installed into the container at `/usr/share/hyprtomic/`, currently empty; `resolve-icons.py` needs only the container's python-gobject + gtk3). |
 | Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. |
 | Licenses | Anything vendored into `/etc/skel` must ship its license under `files/system/usr/share/licenses/` and be listed in `THIRD-PARTY-NOTICES.md`. |
@@ -144,11 +148,29 @@ Where the theme is consumed:
   is intentionally minimal: the base image's `GTK_THEME=Adwaita:dark` and
   `QT_STYLE_OVERRIDE=adwaita-dark` are removed because they shadowed the
   generated palette (QT_STYLE_OVERRIDE beats qt6ct's Kvantum style).
+- **Icon theme**: the host db (`files/system/etc/dconf`) keeps
+  **Papirus-Dark** (Fedora `papirus-icon-theme`). The GUI container ships
+  **Tela-circle-dark** plus its **own** dconf system db under
+  `files/gui/etc/dconf` (compiled by `gui-99-finalize.sh`): without it the
+  container's gsettings falls back to the schema default (Adwaita) and the
+  shell's `resolve-icons.py` resolves blurry legacy 16px icons. Papirus is not
+  duplicated into the GUI image (distrobox bind-mounts the host's
+  `/usr/share/icons` at `/usr/local/share/icons`, so it stays available).
+  When changing the icon theme, update both dbs (and the GUI package list).
+  `qt5ct`/`qt6ct` (`~/.config/qt{5,6}ct/*.conf`, shared with the host) also
+  point at Tela-circle-dark so the container's Qt apps match; the host's only
+  Qt apps are `qt6ct`/`kvantummanager`, which fall back to generic icons
+  because Tela is not packaged for Fedora.
+  Per-app fixes for low-resolution icons (flatpak exports, e.g. Firefox's
+  128px one) go in `~/.local/share/hyprtomic/app-icons/<icon-name>.svg|png`;
+  `resolve-icons.py` checks that directory before the theme lookup.
 - **Other distrobox containers**: distrobox bind-mounts the host's
   `/usr/share/{fonts,icons,themes}` into every container at
   `/usr/local/share/...`, and `$HOME` is shared. Assets installed only in the
   GUI container are therefore invisible to the host and to other containers —
-  put shared fonts/themes on the host image, not in the GUI container.
+  put shared fonts/themes on the host image, not in the GUI container. (The
+  icon theme is a deliberate exception: the GUI container's Tela-circle only
+  has to be visible to the shell inside it.)
 - **Flatpaks**: only host fonts (`/run/host/fonts`) and per-app `xdg-config`
   permissions are visible. Firefox has `xdg-config/gtk-3.0:ro`, Chrome does
   not, and Kvantum/Qt theming cannot be shipped to flatpaks. Keep flatpak
@@ -187,6 +209,7 @@ There is no test suite. Minimum before pushing:
 
 ```bash
 bash -n files/system/usr/bin/hyprtomic-gui-shell
+bash -n files/system/usr/bin/hyprtomic-distrobox-apps
 bash -n files/gui/usr/bin/hyprtomic-gui-session
 sh -n files/system/usr/libexec/hyprtomic/pam-fingerprint-gate
 # shellcheck if available
@@ -243,7 +266,10 @@ End-to-end: on a test machine, update the host image, reboot, run
 - quickshell loads the shelf plus the launcher / control-center / notifications /
   powermenu / OSD. Quick settings (control center) open from the shelf's
   bottom-right cluster (click) or its thin bottom-right hot strip (hover), from
-  `Super+A`, or via `qs -c ii ipc call controlcenter toggle`.
+  `Super+A`, or via `qs -c ii ipc call controlcenter toggle`. The launcher's
+  filter chips are two single-line rows: container/launch-source (All, the GUI
+  container, Flatpak, other distroboxes, Host) above the app categories; both
+  scroll horizontally when they overflow (`FilterChipRow.qml`).
 - Shelf layout: launcher button on the left (quickshell launcher), a 1..10 workspace pager with
   per-workspace app icons in the center, and `[system tray][wifi/bt/battery/
   volume][clock]` on the right — the clock shows `yyyy-MM-dd HH:mm`. System

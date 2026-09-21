@@ -9,6 +9,11 @@ set -euo pipefail
 # copy of the DB, otherwise pacman is unusable inside the running container.
 pacman -Scc --noconfirm
 
+# Compile the container's dconf system db (files/gui/etc/dconf): without it the
+# container's gsettings falls back to the schema defaults (Adwaita icons etc.)
+# and the shell resolves a different icon theme than the rest of the desktop.
+dconf update
+
 mkdir -p /usr/share/pacman/db /usr/share/pacman/cache
 cp -a /var/lib/pacman/. /usr/share/pacman/db/
 sed -i -e 's|^#DBPath.*|DBPath         = /usr/share/pacman/db/|' \

@@ -1,8 +1,10 @@
 import QtQuick
 import "../.." as Root
 
-// ChromeOS-style app icon: white circle background + icon + label
-// Hover state: white semi-transparent rounded rect behind the whole cell
+// App icon cell: icon + label.
+// The active icon theme (Tela-circle-dark in the GUI container) already draws
+// its own circular background, so the launcher does not add one — the icon is
+// rendered at full size. Only the no-icon fallback draws a neutral circle.
 Item {
     id: appIcon
     width: 120
@@ -30,57 +32,60 @@ Item {
         Behavior on color { ColorAnimation { duration: 100 } }
     }
 
-    // ── White circle icon background ─────────────────────────────
-    Rectangle {
-        id: circleBackground
+    // ── App icon ─────────────────────────────────────────────────
+    // sourceSize is only forced for SVGs: they rasterize at that size (sharp
+    // at any display scale). Raster icons (flatpak/web-app artwork) load at
+    // their natural size and are downscaled, so they are never upscaled.
+    Image {
+        id: iconImage
         width: 56
         height: 56
-        radius: 28
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 14
-        color: Qt.rgba(1, 1, 1, 0.9)
-        clip: true
+        anchors.topMargin: 10
+        source: appIcon.iconSource !== "" ? appIcon.iconSource : ""
+        sourceSize: appIcon.iconSource.toLowerCase().endsWith(".svg") ? Qt.size(256, 256) : Qt.size(0, 0)
+        fillMode: Image.PreserveAspectFit
+        smooth: true
+        mipmap: true
+        asynchronous: true
+        visible: source !== "" && status === Image.Ready
 
         scale: mouseArea.pressed ? 0.93 : 1.0
         Behavior on scale {
             NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
         }
 
-        // ── App icon (inscribed square: corners touch the circle) ─
-        Image {
-            id: iconImage
-            property real side: circleBackground.width / Math.sqrt(2)
-            anchors.centerIn: parent
-            width: side
-            height: side
-            source: appIcon.iconSource !== "" ? appIcon.iconSource : ""
-            sourceSize: Qt.size(width * 2, height * 2)
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            asynchronous: true
-            visible: source !== "" && status === Image.Ready
-
-            onStatusChanged: {
-                if (status === Image.Error) source = "";
-            }
+        onStatusChanged: {
+            if (status === Image.Error) source = "";
         }
+    }
 
-        // Fallback: first letter
+    // ── Fallback: first letter on a neutral circle ───────────────
+    Rectangle {
+        id: fallbackCircle
+        width: 56
+        height: 56
+        radius: 28
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 10
+        color: Qt.rgba(1, 1, 1, 0.12)
+        visible: iconImage.status !== Image.Ready
+
         Text {
             anchors.centerIn: parent
             text: appIcon.appName.length > 0 ? appIcon.appName.charAt(0).toUpperCase() : "?"
             font.pixelSize: 20
             font.family: Root.Theme.fontFamily
             font.weight: Font.Medium
-            color: "#555555"
-            visible: iconImage.status !== Image.Ready
+            color: Root.Theme.textSecondary
         }
     }
 
     // ── App name label ───────────────────────────────────────────
     Text {
-        anchors.top: circleBackground.bottom
+        anchors.top: iconImage.bottom
         anchors.topMargin: 8
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width - 6

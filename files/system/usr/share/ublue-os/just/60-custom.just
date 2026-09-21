@@ -38,6 +38,12 @@ gui-container-status:
 fix-flatpak-fonts:
     @/usr/bin/hyprtomic-flatpak-fonts
 
+# Re-register the .desktop files of the other distrobox containers with the
+# host application dirs, so the quickshell launcher lists them (the launcher
+# groups them by container). Also run automatically on session start.
+refresh-distrobox-apps:
+    @/usr/bin/hyprtomic-distrobox-apps
+
 # --- Dotfiles ---
 
 # Sync the baked /etc/skel into $HOME (oameye/atomic-hyprland-style).

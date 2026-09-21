@@ -31,8 +31,13 @@ Scope {
         onTriggered: if (!launcher.panelVisible) launcher._windowVisible = false
     }
 
-    // ── Category filter ──────────────────────────────────────────
+    // ── Filters: launch source/container (top row) + app category ──
     property string selectedCategory: "All Applications"
+    property string selectedContainer: "All"
+
+    // The container the shell itself runs in (distrobox sets CONTAINER_ID).
+    // Entries that do not name another launch source belong to it.
+    readonly property string guiContainer: Quickshell.env("CONTAINER_ID") || "Container"
 
     // Plasma-desktop category order (matches Kickoff sidebar)
     readonly property var plasmaCategoryOrder: [
@@ -65,8 +70,9 @@ Scope {
     })
 
     // Assign each app to exactly one functional category.
-    // Flatpak / Wine are launch-source filters: they are matched separately in
-    // appMatchesCategory so a flatpak app still shows up under Internet etc.
+    // Launch sources (Flatpak, other containers, Host) are filtered separately
+    // by appMatchesContainer, so a flatpak app still shows up under Internet
+    // etc. "Wine" stays a category: it is a runtime, not a container.
     function appCategory(entry) {
         var entryCats = entry.categories || [];
         for (var cat in categoryMap) {
@@ -81,19 +87,64 @@ Scope {
 
     function appMatchesCategory(entry, cat) {
         if (cat === "All Applications") return true;
-        if (cat === "Flatpak") return isFlatpak(entry);
         if (cat === "Wine") return isWine(entry);
         if (cat === "Lost & Found") return appCategory(entry) === "Lost & Found";
         return appCategory(entry) === cat;
     }
 
-    // Dynamic category list — empty categories are hidden.
+    // ── Container / launch-source filter ─────────────────────────
+    // "Flatpak" (host), the GUI container itself, any other distrobox whose
+    // entries were registered by hyprtomic-distrobox-apps, and "Host" for
+    // distrobox-host-exec entries (host terminal etc.).
+    function distroboxContainer(entry) {
+        var exec = entry.execString || "";
+        var m = exec.match(/distrobox-enter\s+(?:--rootful\s+)?(?:-n|--name)\s+([^\s'"]+)/);
+        if (m) return m[1];
+        m = exec.match(/distrobox\s+enter\s+(?:--rootful\s+)?(?:-n|--name)?\s*([^\s'"]+)/);
+        if (m) return m[1];
+        return "";
+    }
+
+    function containerOf(entry) {
+        if (isFlatpak(entry)) return "Flatpak";
+        var c = distroboxContainer(entry);
+        if (c !== "") return c;
+        var exec = entry.execString || "";
+        if (/(^|[\/\s])distrobox-host-exec\b/.test(exec)) return "Host";
+        return guiContainer;
+    }
+
+    function appMatchesContainer(entry, container) {
+        if (container === "All") return true;
+        return containerOf(entry) === container;
+    }
+
+    // Short chip labels for the category row (long names get abbreviated; the
+    // container row keeps the real container names).
+    readonly property var categoryShortNames: ({
+        "All Applications": "All",
+        "Development": "Dev",
+        "Education": "Edu",
+        "Multimedia": "Media",
+        "Science & Math": "Science",
+        "Utilities": "Utils",
+        "Lost & Found": "Other"
+    })
+
+    function categoryLabel(cat) {
+        return categoryShortNames[cat] || cat;
+    }
+
+    // Dynamic category list — empty categories are hidden. Only categories
+    // present in the selected container are offered.
     readonly property var visibleCategories: {
         var result = ["All Applications"];
-        var allCats = ["Flatpak", "Wine"].concat(plasmaCategoryOrder).concat(["Lost & Found"]);
+        var allCats = ["Wine"].concat(plasmaCategoryOrder).concat(["Lost & Found"]);
         for (var i = 0; i < allCats.length; i++) {
             var cat = allCats[i];
             for (var j = 0; j < allApps.length; j++) {
+                if (!appMatchesContainer(allApps[j], selectedContainer))
+                    continue;
                 if (appMatchesCategory(allApps[j], cat)) {
                     result.push(cat);
                     break;
@@ -103,12 +154,45 @@ Scope {
         return result;
     }
 
+    // Containers/sources that actually have apps, in a stable order:
+    // All, the GUI container, Flatpak, other distroboxes (A-Z), Host.
+    readonly property var visibleContainers: {
+        var present = {};
+        for (var i = 0; i < allApps.length; i++)
+            present[containerOf(allApps[i])] = true;
+
+        var result = ["All"];
+        if (present[guiContainer]) result.push(guiContainer);
+        if (present["Flatpak"]) result.push("Flatpak");
+
+        var others = [];
+        for (var name in present) {
+            if (name !== guiContainer && name !== "Flatpak" && name !== "Host")
+                others.push(name);
+        }
+        others.sort();
+        result = result.concat(others);
+
+        if (present["Host"]) result.push("Host");
+        return result;
+    }
+
     onVisibleCategoriesChanged: {
         if (visibleCategories.indexOf(selectedCategory) < 0)
             selectedCategory = "All Applications";
     }
 
+    onVisibleContainersChanged: {
+        if (visibleContainers.indexOf(selectedContainer) < 0)
+            selectedContainer = "All";
+    }
+
     onSelectedCategoryChanged: {
+        kbIndex = 0;
+        kbSection = (selectedCategory === "All Applications" && recentApps.length > 0) ? 0 : 1;
+    }
+
+    onSelectedContainerChanged: {
         kbIndex = 0;
         kbSection = (selectedCategory === "All Applications" && recentApps.length > 0) ? 0 : 1;
     }
@@ -266,8 +350,26 @@ Scope {
         }
     }
 
+    // Flatpak detection: the export list catches normal apps; the Exec check
+    // catches flatpak web apps / hand-made entries whose id is not an app id.
     function isFlatpak(entry) {
-        return flatpakIds[entry.id] === true;
+        if (flatpakIds[entry.id] === true) return true;
+        var exec = entry.execString || "";
+        return /(^|[\/\s])flatpak\s+run\b/.test(exec);
+    }
+
+    // Drop desktop-entry field codes (%U, %f, ...) for commands that are run
+    // through sh -c instead of through uwsm app.
+    function stripFieldCodes(exec) {
+        return exec.replace(/%[fFuUdDnNickvm]/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    // Rewrite "[/usr/bin/]distrobox enter ..." / "distrobox-enter ..." to the
+    // host-runnable form (the GUI container has no distrobox CLI, and uwsm
+    // refuses commands it cannot find in the container).
+    function hostDistroboxExec(exec) {
+        var e = exec.replace(/(^|[\/\s])distrobox\s+enter\b/, "$1distrobox-enter");
+        return stripFieldCodes(e);
     }
 
     function isWine(entry) {
@@ -324,6 +426,8 @@ Scope {
     property var filteredApps: {
         var query = searchText.toLowerCase();
         return allApps.filter(function(entry) {
+            if (!appMatchesContainer(entry, selectedContainer))
+                return false;
             if (!appMatchesCategory(entry, selectedCategory))
                 return false;
             if (query === "")
@@ -356,7 +460,11 @@ Scope {
     // Launch via `uwsm app` so container apps spawn as a transient systemd
     // unit in app-graphical.slice, detached from the compositor cgroup.
     // Flatpaks run on the HOST (the container has no flatpak binary), so those
-    // are launched with distrobox-host-exec instead.
+    // are launched with distrobox-host-exec instead. Flatpak web apps are not
+    // in the flatpak export list (their id is a web-app id), so their own Exec
+    // is forwarded to the host. Distrobox's own "enter <container>" entries and
+    // manual distrobox-export entries cannot go through uwsm (no `distrobox`
+    // CLI in the container), so they are forwarded too.
     function launchApp(entry) {
         recordRecentApp(entry.name);
         var id = entry.id || "";
@@ -365,9 +473,18 @@ Scope {
             panelVisible = false;
             return;
         }
+        var dbx = distroboxContainer(entry);
         var cmd;
         if (isFlatpak(entry)) {
-            cmd = "distrobox-host-exec flatpak run " + id;
+            if (flatpakIds[id] === true)
+                cmd = "distrobox-host-exec flatpak run " + id;
+            else
+                cmd = "distrobox-host-exec sh -c '" + stripFieldCodes(exec).replace(/'/g, "'\\''") + "'";
+        } else if (dbx !== "" && exec.indexOf("distrobox-host-exec") < 0) {
+            if (entry.runInTerminal)
+                cmd = "distrobox-host-exec ghostty -e distrobox-enter -n '" + dbx + "'";
+            else
+                cmd = "distrobox-host-exec " + hostDistroboxExec(exec);
         } else if (id) {
             // -s a: pin to app-graphical.slice so the new scope sits next to
             // autostart apps (which we move into the same slice via the
@@ -654,53 +771,31 @@ Scope {
                             }
                         }
 
-                        // ── Category tabs ───────────────────────
-                        Item {
+                        // ── Filter chips: container row + category row ──
+                        // Both are single-line; drag or scroll sideways when
+                        // the chips do not fit (FilterChipRow).
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: categoryFlow.height
+                            spacing: 6
 
-                            Flow {
-                                id: categoryFlow
-                                width: parent.width
-                                height: childrenRect.height
-                                spacing: 6
+                            FilterChipRow {
+                                id: containerRow
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                visible: launcher.visibleContainers.length > 1
+                                model: launcher.visibleContainers
+                                selected: launcher.selectedContainer
+                                onActivated: (value) => launcher.selectedContainer = value
+                            }
 
-                                Repeater {
-                                    model: launcher.visibleCategories
-
-                                    Rectangle {
-                                        required property string modelData
-                                        required property int index
-                                        width: tabLabel.implicitWidth + 22
-                                        height: 28
-                                        radius: 14
-                                        color: launcher.selectedCategory === modelData
-                                            ? Qt.rgba(Root.Theme.primary.r, Root.Theme.primary.g, Root.Theme.primary.b, 0.85)
-                                            : Qt.rgba(Root.Theme.surfaceContainer.r, Root.Theme.surfaceContainer.g, Root.Theme.surfaceContainer.b, 0.5)
-                                        border.width: 1
-                                        border.color: launcher.selectedCategory === modelData
-                                            ? "transparent"
-                                            : Qt.rgba(Root.Theme.panelBorder.r, Root.Theme.panelBorder.g, Root.Theme.panelBorder.b, 0.25)
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                                        Text {
-                                            id: tabLabel
-                                            anchors.centerIn: parent
-                                            text: modelData
-                                            font.pixelSize: 11
-                                            font.family: Root.Theme.fontFamily
-                                            color: launcher.selectedCategory === modelData
-                                                ? Root.Theme.textPrimary
-                                                : Root.Theme.textSecondary
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: launcher.selectedCategory = modelData
-                                        }
-                                    }
-                                }
+                            FilterChipRow {
+                                id: categoryRow
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                model: launcher.visibleCategories
+                                selected: launcher.selectedCategory
+                                labelFor: (value) => launcher.categoryLabel(value)
+                                onActivated: (value) => launcher.selectedCategory = value
                             }
                         }
 

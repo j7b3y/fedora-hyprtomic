@@ -41,12 +41,20 @@ Bridges between host and container:
   pager with per-workspace app icons in the center, and
   `[system tray][wifi/bt/battery/volume][clock]` on the right. The clock shows
   `yyyy-MM-dd HH:mm`.
+- **Launcher**: two single-line filter rows above the app grid — launch
+  source/container (`All`, the GUI container, `Flatpak`, other distroboxes,
+  `Host`) and app category — both scroll sideways when they overflow. Apps from
+  the other distroboxes (e.g. `develop`, `game`) are registered by
+  `hyprtomic-distrobox-apps` at session start (`ujust refresh-distrobox-apps`
+  re-runs it) and launch through the host's `distrobox-enter`.
 - **Control center** (bottom-right hot strip, click or hover; `Super+A`):
   Wi-Fi, Bluetooth, airplane mode, theme switcher, volume + output device
   selector, brightness.
 - **Theming**: `apply-theme.sh` keeps Hyprland borders, GTK3/4, Qt (qt6ct +
   Kvantum), ghostty, rofi and the shell palette in sync. Six md3 themes ship in
-  `Theme.qml`; switching is done from the control center.
+  `Theme.qml`; switching is done from the control center. Icons are
+  Tela-circle-dark in the GUI container (the launcher and container GTK/Qt
+  apps) and Papirus-Dark on the host.
 - **Notifications / OSD / power menu** owned by quickshell: volume OSD, volume
   keys, `Super+Delete` power menu (shutdown / reboot / lock / suspend — power
   actions are forwarded to the host). Notifications keep an unread history:
@@ -90,6 +98,7 @@ ujust gui-container-setup             # create + initialize the container
 ujust gui-container-update            # recreate from the latest image
 ujust gui-container-reset             # same as update, explicit
 ujust gui-container-status            # show container state
+ujust refresh-distrobox-apps          # re-register other containers' apps
 hyprtomic-gui-shell status            # same, via the CLI
 ```
 
@@ -210,6 +219,14 @@ prints.
 - `scripts/apply-theme.sh` owns every generated file (GTK/Qt/Kvantum/ghostty/
   rofi/Hyprland borders). Adding a theme means editing `Theme.qml` **and** the
   `case` block in the script — see `AGENTS.md`.
+- `scripts/resolve-icons.py` resolves launcher/shelf icons through GTK
+  (Tela-circle-dark in the container; see `AGENTS.md` → "Where the theme is
+  consumed"). The launcher rasterizes SVG icons at 256px and keeps raster icons
+  at their natural size, so the theme icons stay sharp; flatpak/web-app icons
+  use their own artwork. If an app's own icon is low-resolution (some flatpak
+  exports max out at 128px, e.g. Firefox), drop a bigger
+  `~/.local/share/hyprtomic/app-icons/<icon-name>.svg|png` — it wins over the
+  theme lookup. Restart the shell (or re-login) to pick it up.
 - The shell config name can be changed with `HYPRTOMIC_QS_CONFIG` (passed
   through by `hyprtomic-gui-shell`); the default is `ii`.
 

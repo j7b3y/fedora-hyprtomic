@@ -5,13 +5,12 @@ Uses the same icon resolution algorithm as nwg-dock (a GTK3 app), so the
 icon pack is consistent between the dock and the Quickshell launcher/shelf.
 
 GTK correctly follows the `Inherits` chain declared in each theme's
-index.theme. For example, with `Papirus-Dark` active (which inherits
-`breeze-dark,hicolor`), GTK searches:
-  Papirus-Dark → breeze-dark → hicolor
-and never `Papirus` (the light variant) unless that is also in the
-inheritance chain. This fixes the previous bash resolver, which picked
-`Papirus` icons when the active theme was `Papirus-Dark` because the
-script's hardcoded scoring preferred the `Papirus` directory.
+index.theme. For example, with `Tela-circle-dark` active (which inherits
+`hicolor,Adwaita,breeze`), GTK searches:
+  Tela-circle-dark → hicolor → Adwaita → breeze
+and not arbitrary theme directories. This fixes the previous bash resolver,
+which picked `Papirus` icons when the active theme was `Papirus-Dark` because
+the script's hardcoded scoring preferred the `Papirus` directory.
 
 Usage:
     resolve-icons.py [icon_name ...]
@@ -27,6 +26,11 @@ Output: name<TAB>path (one per line). Names that cannot be resolved are
 omitted. Symbolic icons (`*/symbolic/*`) are skipped — they render as
 black/transparent SVGs without theme colorization, so they're useless as
 fallback art.
+
+Per-app overrides: a file named after the icon (e.g.
+`org.mozilla.firefox.png` or `.svg`) in `~/.local/share/hyprtomic/app-icons/`
+wins over the theme lookup. Use it when an app ships a low-resolution icon
+(some flatpak exports max out at 128px).
 """
 
 from __future__ import annotations
@@ -82,6 +86,23 @@ def _direct_file(name: str) -> str | None:
         return None
     if os.path.isfile(name) and os.access(name, os.R_OK):
         return name
+    return None
+
+
+def _override_icon(name: str) -> str | None:
+    """Per-app icon override: ~/.local/share/hyprtomic/app-icons/<name>.<ext>.
+
+    Checked before the theme lookup, so it also beats a low-resolution icon
+    from a flatpak export. The file name is the desktop entry's Icon= value
+    (e.g. org.mozilla.firefox.png).
+    """
+    if "/" in name:
+        return None
+    root = os.path.expanduser("~/.local/share/hyprtomic/app-icons")
+    for ext in (".svg", ".png", ".webp"):
+        path = os.path.join(root, name + ext)
+        if os.path.isfile(path) and os.access(path, os.R_OK):
+            return path
     return None
 
 
@@ -210,9 +231,16 @@ def resolve(name: str) -> str | None:
     direct = _direct_file(name)
     if direct:
         return direct
-    # lookup_icon follows the Inherits chain. Pass size 0 to let the theme
-    # pick its preferred size; the path is what matters for Image.source.
-    info = THEME.lookup_icon(name, 0, 0)
+    override = _override_icon(name)
+    if override:
+        return override
+    # Lookup with a large requested size: size 0 returns the smallest variant
+    # (often a 16x16 PNG) even when 128/256/512 variants exist. FORCE_SVG
+    # prefers scalable icons when the theme has one; the plain lookup is the
+    # fallback for PNG-only entries (flatpak exports etc.).
+    info = THEME.lookup_icon(name, 512, Gtk.IconLookupFlags.FORCE_SVG)
+    if not info:
+        info = THEME.lookup_icon(name, 512, 0)
     if info:
         path = info.get_filename()
         if path and not _is_symbolic(path):

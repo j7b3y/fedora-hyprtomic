@@ -40,8 +40,10 @@ PACMAN_PKGS=(
   # fonts (base: noto CJK + emoji; decorations added in the AUR step)
   noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd
   ttf-material-symbols-variable
-  # icon theme (GTK/Qt/launcher icon resolution)
-  papirus-icon-theme
+  # icon theme. Papirus stays on the host; distrobox bind-mounts the host's
+  # /usr/share/icons at /usr/local/share/icons, so it is still available inside
+  # the container without a second copy.
+  tela-circle-icon-theme-standard
   # file manager (Base Dotfiles override: nemo)
   nemo nemo-fileroller nemo-image-converter nemo-python
   # IME

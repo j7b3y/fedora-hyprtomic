@@ -176,6 +176,13 @@ hl.config({
         new_render_scheduling = true,
     },
 
+    -- マウスドラッグのしきい値 (px)。0 (既定) だと SUPER+クリックの僅かな
+    -- 動きでもドラッグ扱いになり、quadgrid のドロップ配置が誤発火する。
+    -- 10px 動かすまでドラッグを開始しない。
+    binds = {
+        drag_threshold = 10,
+    },
+
     -- Input
     input = {
         kb_layout          = "jp",
@@ -333,11 +340,16 @@ hl.bind(mainMod .. " + CTRL + up",    hl.dsp.window.resize({ x = 0,   y = -20, r
 hl.bind(mainMod .. " + CTRL + down",  hl.dsp.window.resize({ x = 0,   y = 20,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 下 +20px" })
 
 -- Mouse bindings
-hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true, desc = "マウスドラッグでウィンドウリサイズ" })
 if quadgrid then
-    -- quadgrid のタイルはドロップしたセルに配置 (drag = ドラッグ後のボタンリリースで発火)
-    hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag_end, { drag = true, desc = "quadgrid: ドロップ先セルに配置" })
+    -- quadgrid: 押下でウィンドウのドラッグを開始し、解放時 (release follow-up) に
+    -- ドロップ先のセルへ配置。先客の居るセルなら入れ替え、別モニタへのドロップは
+    -- C++ 側のワークスペース移動に従う (詳細は layouts/quadgrid.lua)。
+    -- ※ 押下用 (dispatcher) と解放用 (drag フラグ) の 2 bind に分けると、
+    --    押下を消費した bind が解放用 bind を shadow して発火しない
+    hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag, { mouse = true, desc = "quadgrid: ドラッグ&ドロップでセル移動" })
+else
+    hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 end
 
 -- Locked bindings - work on lock screen

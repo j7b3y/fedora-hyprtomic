@@ -110,7 +110,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 | Clipboard / IME | `clipse` + `clipse-gui` (container AUR): the daemon is started by `hyprtomic-gui-session`, `Super+V` opens the GUI (exported). fcitx5 + mozkey-ibg-bin live in the container; the host env exports `GTK_IM_MODULE` / `QT_IM_MODULE` / `XMODIFIERS`. |
 | GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Bibata-Modern-Classic cursor (baked into the dconf db). Icons: Papirus-Dark on the host, Tela-circle-dark in the GUI container (see "Where the theme is consumed"). |
 | Python deps | The shell venv is built from `files/gui/usr/share/hyprtomic/uv-requirements.txt` (installed into the container at `/usr/share/hyprtomic/`, currently empty; `resolve-icons.py` needs only the container's python-gobject + gtk3). |
-| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. Startup / run-in-background permissions: `xdg-desktop-portal-gnome` provides `org.freedesktop.portal.Background` (the Hyprland and GTK backends do not; `files/system/etc/xdg/xdg-desktop-portal/portals.conf` routes only Background to it), `hyprtomic-gui-shell` seeds the empty `background/background` permission-store row so Flatseal's Background toggle is usable, and `dex -a` (autostart in `hyprland.lua`) runs `~/.config/autostart` entries at login. |
+| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. Startup / run-in-background permissions: `xdg-desktop-portal-gnome` provides `org.freedesktop.portal.Background` (the Hyprland and GTK backends do not; `files/system/etc/xdg/xdg-desktop-portal/portals.conf` routes only Background to it), `hyprtomic-gui-shell` seeds the empty `background/background` permission-store row so Flatseal's Background toggle is usable, and `dex -a` (autostart in `hyprland.lua`) runs `~/.config/autostart` entries at login. Discord Rich Presence: the same session script points `$XDG_RUNTIME_DIR/discord-ipc-0` at the installed flatpak client (Vesktop) and adds the matching global flatpak overrides. |
 | Licenses | Anything vendored into `/etc/skel` must ship its license under `files/system/usr/share/licenses/` and be listed in `THIRD-PARTY-NOTICES.md`. |
 
 Also keep in mind:
@@ -284,6 +284,10 @@ End-to-end: on a test machine, update the host image, reboot, run
   login. The GNOME backend's app-state monitor needs gnome-shell, so
   background-app monitoring (kill/notify) stays inactive under Hyprland; the
   permission grant, the autostart file and Flatseal are unaffected.
+- Discord Rich Presence works with flatpak clients (Vesktop): `hyprtomic-gui-shell`
+  points `$XDG_RUNTIME_DIR/discord-ipc-0` at the client's sandbox socket and adds
+  the matching global flatpak override, so games and apps can set presence. Only
+  Game SDK games work - process scanning cannot see other sandboxes.
 - The theme switcher keeps Hyprland, GTK, Qt/Kvantum, ghostty and rofi in sync
   (see "Theming"); `apply-theme.sh` runs on every shell start and on theme
   change.

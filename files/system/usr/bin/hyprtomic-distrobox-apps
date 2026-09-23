@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # Register the .desktop files of the other distrobox containers with the host's
 # application dirs, so the quickshell launcher inside the GUI container can
-# list and launch them. Runs on the host: hyprtomic-gui-shell calls it in the
-# background at session start, `ujust refresh-distrobox-apps` re-runs it.
+# list and launch them. Runs on the host:
+#
+#   - hyprtomic-distrobox-apps.service (systemd user unit) keeps it alive in
+#     --watch mode: containers that start after login are registered on the
+#     next poll, exports of removed containers are pruned;
+#   - hyprtomic-gui-shell runs a one-shot pass at session start (cheap
+#     fallback); `ujust refresh-distrobox-apps` triggers one manually.
+#
+# Icons: distrobox-export mirrors /usr/share icons into the host icon dir; this
+# script additionally mirrors per-user icons from the container home (Steam's
+# steam_icon_<appid>) and keeps Steam library cover art in
+# ~/.local/share/hyprtomic/app-icons/ when a game only ships a tiny clienticon.
 #
 # The GUI container only has distrobox-export/distrobox-host-exec (distrobox
 # injects those), not the `distrobox` CLI, so distrobox-export is told to prefix
@@ -16,6 +26,9 @@ set -uo pipefail
 CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 MARKER="X-HyprTomic-Container="
+# --watch: seconds between polls of the running-container list. `distrobox
+# list` is a cheap podman query, and the launcher picks new entries up live.
+WATCH_INTERVAL="${HYPRTOMIC_DISTROBOX_APPS_INTERVAL:-15}"
 
 log() { printf '%s\n' "$*"; }
 
@@ -44,12 +57,79 @@ running_container_names() {
         }'
 }
 
-# Export every visible .desktop file of one container (runs inside it).
+# Export every visible .desktop file of one container (runs inside it) and
+# mirror the icons that only exist inside that container.
+# stdin is /dev/null on purpose: `distrobox enter` must not consume whatever
+# feeds the caller (in sync() it used to eat the loop's container list, so only
+# the first container was ever registered).
 export_container() {
     local name="$1"
     timeout 120 distrobox enter "$name" -- \
         env DISTROBOX_ENTER_PATH="distrobox-host-exec distrobox-enter" \
         sh -lc '
+            # Host home as seen from this container.
+            host_home="${DISTROBOX_HOST_HOME:-$HOME}"
+            host_icons="/run/host${host_home}/.local/share/icons"
+            host_app_icons="/run/host${host_home}/.local/share/hyprtomic/app-icons"
+
+            # Copy the container icon files the launcher cannot see into the
+            # host icon dir, keeping the hicolor/<size>/apps layout. The
+            # launcher theme (Tela-circle) falls back to hicolor, while
+            # distrobox-export only mirrors /usr/share icons: per-user icons
+            # (Steam writes steam_icon_<appid>) never leave the container home.
+            mirror_home_icon() {
+                icon="$1"
+                case "$icon" in "" | */*) return 0 ;; esac
+                [ -d "$HOME/.local/share/icons" ] || return 0
+                # Shared home: the icons are already visible to the host.
+                [ "$host_home" != "$HOME" ] || return 0
+                find "$HOME/.local/share/icons" -type f \
+                    \( -name "${icon}.png" -o -name "${icon}.svg" -o -name "${icon}.xpm" \) |
+                    while IFS= read -r file; do
+                        rel="${file#"$HOME"/.local/share/icons/}"
+                        mkdir -p "$host_icons/$(dirname "$rel")"
+                        cp -f "$file" "$host_icons/$rel"
+                    done
+            }
+
+            # Largest canonical hicolor size of a square icon (0 = none); used
+            # to decide whether the Steam cover art below is the better icon.
+            biggest_square_icon() {
+                for size in 512 256 192 128 96 72 64; do
+                    for ext in png svg; do
+                        if [ -f "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/${1}.${ext}" ]; then
+                            printf %s "$size"
+                            return 0
+                        fi
+                    done
+                done
+                printf 0
+            }
+
+            # Some Steam games only ship a 32px clienticon, or none at all
+            # (the entry points at Icon=steam). Steam keeps the cover art in
+            # its library cache; use it as the launcher icon. app-icons wins
+            # over the icon theme and QML renders JPEG fine.
+            steam_cover_icon() {
+                icon="$1"
+                appid="${icon#steam_icon_}"
+                override="$host_app_icons/${icon}.jpg"
+                if [ "$(biggest_square_icon "$icon")" -ge 64 ]; then
+                    rm -f "$override"   # a real square icon exists (again)
+                    return 0
+                fi
+                for cache in "$HOME/.steam/steam" "$HOME/.local/share/Steam"; do
+                    [ -d "$cache/appcache/librarycache/$appid" ] || continue
+                    for asset in library_600x900.jpg library_capsule.jpg library_header.jpg header.jpg; do
+                        cover="$(find "$cache/appcache/librarycache/$appid" -name "$asset" 2>/dev/null | head -n 1)"
+                        [ -n "$cover" ] || continue
+                        mkdir -p "$host_app_icons"
+                        cp -f "$cover" "$override"
+                        return 0
+                    done
+                done
+            }
+
             for dir in "$HOME/.local/share/applications" /usr/local/share/applications /usr/share/applications; do
                 [ -d "$dir" ] || continue
                 for f in "$dir"/*.desktop; do
@@ -58,10 +138,22 @@ export_container() {
                     grep -q "^Hidden=true" "$f" && continue
                     # Never wrap an existing distrobox export/terminal entry.
                     grep -q "^Exec=.*distrobox" "$f" && continue
+                    icon="$(sed -n "s/^Icon=//p" "$f" | head -n 1)"
+                    # Steam games it has no icon for point at Icon=steam; treat
+                    # them as the per-game icon (fix_steam_icons renames the
+                    # exported copy), so mirroring/cover art applies.
+                    if [ "$icon" = "steam" ]; then
+                        appid="$(sed -n "s|^Exec=.*steam://rungameid/\([0-9][0-9]*\).*|\1|p" "$f" | head -n 1)"
+                        [ -n "$appid" ] && icon="steam_icon_${appid}"
+                    fi
                     distrobox-export --app "$f" >/dev/null 2>&1 || true
+                    mirror_home_icon "$icon"
+                    case "$icon" in
+                        steam_icon_*) steam_cover_icon "$icon" ;;
+                    esac
                 done
             done
-        ' 2>/dev/null
+        ' </dev/null 2>/dev/null
 }
 
 # Tag the files distrobox-export wrote for this container, so stale exports can
@@ -72,6 +164,26 @@ mark_exports() {
         [ -f "$f" ] || continue
         grep -q "^${MARKER}" "$f" && continue
         sed -i "/^\[Desktop Entry\]$/a ${MARKER}${name}" "$f"
+    done
+}
+
+# Steam writes Icon=steam for shortcuts it has no per-game icon for, but the
+# exported Exec still carries the steam://rungameid/<appid> URL and the export
+# mirrored the game icon (or its cover art) as steam_icon_<appid>. Repoint the
+# entry, unless the game has neither (then the Steam logo is the better icon).
+fix_steam_icons() {
+    local name="$1" f appid data
+    data="${XDG_DATA_HOME:-$HOME/.local/share}"
+    for f in "$APPS_DIR/${name}-"*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q '^Icon=steam$' "$f" || continue
+        appid="$(sed -n 's|^Exec=.*steam://rungameid/\([0-9][0-9]*\).*|\1|p' "$f" | head -n 1)"
+        [ -n "$appid" ] || continue
+        if [ ! -f "$data/hyprtomic/app-icons/steam_icon_${appid}.jpg" ] &&
+            [ -z "$(find "$data/icons" -name "steam_icon_${appid}.*" -print -quit 2>/dev/null)" ]; then
+            continue
+        fi
+        sed -i "s|^Icon=steam$|Icon=steam_icon_${appid}|" "$f"
     done
 }
 
@@ -90,14 +202,16 @@ prune_stale() {
     done
 }
 
-main() {
-    command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 0; }
+# One registration pass over the running containers. Returns non-zero when it
+# skipped (no distrobox / no container list), so --watch retries.
+sync() {
+    command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 1; }
 
     local all running
     all="$(container_names)"
     # No container list means podman/distrobox is not answering; do not touch
     # anything (pruning would delete every export).
-    [ -n "$all" ] || { log "no containers reported; skipping"; return 0; }
+    [ -n "$all" ] || { log "no containers reported; skipping"; return 1; }
 
     mkdir -p "$APPS_DIR"
 
@@ -109,6 +223,7 @@ main() {
         log "registering apps from '$c' ..."
         export_container "$c" || true
         mark_exports "$c" || true
+        fix_steam_icons "$c" || true
     done <<< "$running"
 
     # Prune against every container, not just the running ones: a stopped
@@ -118,6 +233,37 @@ main() {
         update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
     fi
     log "done"
+}
+
+# --watch: stay alive for the whole session and re-sync whenever the set of
+# running containers changes. Stopped containers keep their entries; starting
+# one is enough to get its apps registered.
+watch() {
+    # Only one watcher: one started by hand (or a stale one from a previous
+    # login) must not stack.
+    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
+    mkdir -p "$state_dir"
+    exec 9>"$state_dir/distrobox-apps-watch.lock"
+    flock -n 9 || { log "another watcher is already running; exiting"; return 0; }
+
+    local last="" cur
+    while :; do
+        cur="$(running_container_names)"
+        # Re-sync on every change; last is only advanced on success, so a
+        # skipped sync (podman not answering yet) is retried.
+        if [ "$cur" != "$last" ] && sync; then
+            last="$cur"
+        fi
+        sleep "$WATCH_INTERVAL"
+    done
+}
+
+main() {
+    case "${1:-}" in
+        --watch) watch ;;
+        "") sync ;;
+        *) log "usage: hyprtomic-distrobox-apps [--watch]"; return 2 ;;
+    esac
 }
 
 main "$@"

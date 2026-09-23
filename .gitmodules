@@ -1,0 +1,3 @@
+[submodule ".opencode/skills/hyprland"]
+	path = .opencode/skills/hyprland
+	url = https://github.com/marceloeatworld/hyprland-ai-skill.git

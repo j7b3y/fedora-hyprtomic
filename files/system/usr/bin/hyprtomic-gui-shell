@@ -173,6 +173,14 @@ case "${1:-}" in
         # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
         # apps must be restarted to pick the fix up.
         /usr/bin/hyprtomic-flatpak-fonts >/dev/null 2>&1 || true
+        # Flatseal only offers its per-app "Background" (run in background /
+        # autostart) toggle once the flatpak permission store has a
+        # background/background row, and nothing creates that row until an app
+        # asks the Background portal. Seed an empty row so the permission can
+        # be granted before the first request.
+        if ! flatpak permission-list background 2>/dev/null | grep -q .; then
+            flatpak permission-set background background '' >/dev/null 2>&1 || true
+        fi
         # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
         # loses it, and QML errors are the usual reason the bar does not appear.
         log="$HOME/.local/state/hyprtomic/gui-session.log"

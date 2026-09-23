@@ -38,6 +38,15 @@ modules:
         # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
         # The GUI shell is NOT installed here: it lives in the Arch GUI container
         # (ghcr.io/j7b3y/hyprtomic-gui).
+        # Background portal (flatpak "run in background" / autostart
+        # permissions): neither the Hyprland nor the GTK portal backend
+        # implements org.freedesktop.portal.Background, so apps could not ask
+        # for those permissions and Flatseal's Background toggle stayed greyed
+        # out. The GNOME backend provides the interface; the portals.conf in
+        # files/system/etc/xdg/xdg-desktop-portal/ routes only Background to
+        # it. Its compositor-state queries need gnome-shell and stay inactive
+        # under Hyprland, which only disables background-app monitoring.
+        - xdg-desktop-portal-gnome
         # SDDM astronaut theme deps
         - qt6-qtsvg
         - qt6-qtvirtualkeyboard

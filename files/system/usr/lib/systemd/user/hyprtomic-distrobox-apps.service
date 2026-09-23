@@ -1,0 +1,15 @@
+# Keep the host's application dirs in sync with the running distrobox
+# containers, so the quickshell launcher inside the GUI container lists their
+# apps (and drops exports of containers that are gone). --watch polls the
+# container list; see /usr/bin/hyprtomic-distrobox-apps.
+[Unit]
+Description=Register distrobox applications with the desktop launcher
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/hyprtomic-distrobox-apps --watch
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target

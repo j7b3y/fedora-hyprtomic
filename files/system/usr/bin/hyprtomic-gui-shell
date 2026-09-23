@@ -173,6 +173,33 @@ case "${1:-}" in
         # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
         # apps must be restarted to pick the fix up.
         /usr/bin/hyprtomic-flatpak-fonts >/dev/null 2>&1 || true
+        # Flatseal only offers its per-app "Background" (run in background /
+        # autostart) toggle once the flatpak permission store has a
+        # background/background row, and nothing creates that row until an app
+        # asks the Background portal. Seed an empty row so the permission can
+        # be granted before the first request.
+        if ! flatpak permission-list background 2>/dev/null | grep -q .; then
+            flatpak permission-set background background '' >/dev/null 2>&1 || true
+        fi
+        # Discord Rich Presence: a flatpak Discord client (Vesktop) keeps its
+        # IPC socket in its sandbox runtime dir, while games and other apps
+        # look for it at $XDG_RUNTIME_DIR/discord-ipc-0. Point the standard
+        # path at the installed client and let every flatpak reach it (see
+        # https://vesktop.dev/wiki/linux/flatpak/). An existing symlink (e.g.
+        # from a ~/.config/user-tmpfiles.d entry) is left alone.
+        for client in dev.vencord.Vesktop com.discordapp.Discord; do
+            flatpak list --app --columns=application 2>/dev/null | grep -qx "$client" || continue
+            if ! flatpak override --user --show 2>/dev/null | grep -q "xdg-run/discord-ipc-0"; then
+                flatpak override --user \
+                    --filesystem="xdg-run/.flatpak/$client:create" \
+                    --filesystem=xdg-run/discord-ipc-0 >/dev/null 2>&1 || true
+            fi
+            link="$XDG_RUNTIME_DIR/discord-ipc-0"
+            if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+                ln -s ".flatpak/$client/xdg-run/discord-ipc-0" "$link" || true
+            fi
+            break
+        done
         # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
         # loses it, and QML errors are the usual reason the bar does not appear.
         log="$HOME/.local/state/hyprtomic/gui-session.log"
@@ -180,7 +207,9 @@ case "${1:-}" in
         echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
         # Register the other distroboxes' .desktop files for the launcher
         # (background: entering each container takes a moment, and the shell
-        # picks the new entries up live). See hyprtomic-distrobox-apps.
+        # picks the new entries up live). hyprtomic-distrobox-apps.service
+        # covers containers started after login; this pass is the cheap
+        # fallback. See hyprtomic-distrobox-apps.
         /usr/bin/hyprtomic-distrobox-apps >>"$log" 2>&1 &
         exec distrobox enter "$CONTAINER" -- \
             env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \

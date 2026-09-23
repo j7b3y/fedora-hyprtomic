@@ -7,6 +7,7 @@ set -euo pipefail
 # 2024 source snapshot fails to compile against the current Arch toolchain.
 AUR_PKGS=(
   mozkey-ibg-bin     # Japanese IME engine (Mozkey IbG, prebuilt for fcitx5)
+  fcitx5-hazkey-bin  # Fallback Japanese IME
   wlogout
   hypremoji           # emoji picker
   clipse              # clipboard history daemon (clipse -listen)

@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/software/polkit/policyconfig.dtd">
+<!--
+  Polkit action for the Bitwarden flatpak's "Unlock with system authentication"
+  (https://bitwarden.com/help/biometrics/). Flatpak apps cannot install this
+  themselves, so the host image ships it.
+
+  The action id must match what the app checks and uses; upstream keeps it in
+  apps/desktop/resources/com.bitwarden.desktop.policy (the file name below is
+  the one the app writes during automatic setup on non-sandboxed installs).
+-->
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+
 <policyconfig>
-  <vendor>Bitwarden</vendor>
-  <action id="com.bitwarden.Bitwarden.policy">
-    <description>Unlock Bitwarden vault</description>
-    <message>Authentication is required to unlock the Bitwarden vault</message>
-    <defaults>
-      <allow_any>auth_admin</allow_any>
-      <allow_inactive>auth_admin</allow_inactive>
-      <allow_active>yes</allow_active>
-    </defaults>
-  </action>
+    <action id="com.bitwarden.Bitwarden.unlock">
+      <description>Unlock Bitwarden</description>
+      <message>Authenticate to unlock Bitwarden</message>
+      <defaults>
+        <allow_any>no</allow_any>
+        <allow_inactive>no</allow_inactive>
+        <allow_active>auth_self</allow_active>
+      </defaults>
+    </action>
 </policyconfig>

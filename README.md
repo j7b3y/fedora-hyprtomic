@@ -33,6 +33,8 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 - **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
 - **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。
 - **Flatpak**: ホスト側（system）で管理。ランチャーからは `distrobox-host-exec flatpak run …` 経由で起動。
+- **Flatpak の権限**: バックグラウンド実行・自動起動（スタートアップ）は Background ポータル（`xdg-desktop-portal-gnome`）が担当し、Flatseal の「Background」トグルで設定できます。アプリが登録した自動起動はログイン時に `dex` が実行します。
+- **Discord Rich Presence**: flatpak の Vesktop に他アプリ／ゲームのプレゼンスを通知できます（`hyprtomic-gui-shell` が `$XDG_RUNTIME_DIR/discord-ipc-0` をクライアントのソケットへリンクし、flatpak 全体に必要な override を付与）。
 - **テーマ**: `apply-theme.sh` が Hyprland / GTK3/4 / Qt（qt6ct + Kvantum）/ ghostty / rofi / シェル配色を同期。6 種類の md3 テーマをコントロールセンターから切替。アイコンはコンテナが Tela-circle-dark、ホストが Papirus-Dark。
 - **オーディオ / ネットワーク / Bluetooth**: PipeWire・NetworkManager・BlueZ はホスト側。
 
@@ -208,5 +210,8 @@ cosign verify --key cosign.pub ghcr.io/j7b3y/hyprtomic-gui
 ## 注意事項
 
 - **Chromium / Electron 系 flatpak の日本語フォント**: flatpak ≥ 1.18 ではホストのフォントがキャッシュ経由でしか見えず、同梱の新しい fontconfig がそれを読めないため日本語が豆腐になります。`hyprtomic-flatpak-fonts` がアプリごとの fontconfig を書き換えて修正します（セッション開始時に自動実行、`ujust fix-flatpak-fonts` で再実行）。該当アプリは再起動してください。Firefox は影響を受けません。
+- **Flatpak のバックグラウンド / 自動起動**: Background ポータルは GNOME のバックエンド（`xdg-desktop-portal-gnome`）を Background 専用で使っています（Hyprland/GTK のバックエンドは未実装のため）。GNOME シェルが無いので「バックグラウンドで動いているアプリの監視（強制終了・通知）」だけは無効です。自動起動の登録は `~/.config/autostart` に書かれ、ログイン時に `dex -a` が実行します（`/etc/xdg/autostart` の GNOME/XFCE アプレットは対象外）。
+- **Flatpak 版 Discord クライアントの Rich Presence**: サンドボックスから他プロセスは見えないため、プロセス走査によるプレゼンス検出はできません（Discord Game SDK を使うゲームのみ対応）。`hyprtomic-gui-shell` がログイン時に `$XDG_RUNTIME_DIR/discord-ipc-0` を Vesktop のソケットへリンクし、flatpak 全体へ必要な override（`xdg-run/discord-ipc-0` とクライアントのランタイムディレクトリ）を付与します。反映には再ログインと、ゲーム／Steam の再起動が必要です。
+- **Bitwarden（flatpak）の「システム認証でのロック解除」**: Flatpak では Bitwarden が polkit ポリシーを自動セットアップできないため、必要なアクション（`com.bitwarden.Bitwarden.unlock`）をホストイメージに同梱しています。Bitwarden の 設定 → セキュリティ → 「Unlock with system authentication」をオンにすると、ロック解除時に polkit エージェント（hyprpolkitagent）が認証を求めます。初回（アプリ起動後）はマスターパスワードまたは PIN でのロック解除が必要です。
 - **テーマの到達範囲**: distrobox はホストの `/usr/share/{fonts,themes,icons}` を各コンテナに bind mount しますが、GUI コンテナだけに入れたアセットはホストや他コンテナからは見えません。Flatpak にはホストのフォントと per-app の `xdg-config` 権限しか渡らず、Kvantum/Qt テーマは配れません。
 - **`local.conf` が唯一の逃げ道**: `/etc/skel` 由来のファイルを直接編集しないでください。`overwrite=1` の同期で置き換わります。

@@ -86,6 +86,12 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("systemctl --user import-environment QT_QPA_PLATFORMTHEME GTK_IM_MODULE QT_IM_MODULE XMODIFIERS")
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets,pkcs11,ssh")
+    -- XDG autostart: the Background portal writes a flatpak app's "start on
+    -- login" entry to ~/.config/autostart; dex runs those entries (there is no
+    -- gnome-session here). Only the user directory is scanned on purpose:
+    -- /etc/xdg/autostart holds GNOME/XFCE applets (blueman, nm-applet,
+    -- geoclue-demo-agent, ...) that do not belong in this session.
+    hl.exec_cmd('dex -a -e Hyprland -s "$HOME/.config/autostart"')
     hl.exec_cmd("swaybg -i $HOME/.local/share/backgrounds/wallpaper.jpg -m fill")
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 36")
     -- GUI shell (quickshell) in the Arch container. Manages the container via
@@ -174,6 +180,13 @@ hl.config({
 
     render = {
         new_render_scheduling = true,
+    },
+
+    -- マウスドラッグのしきい値 (px)。0 (既定) だと SUPER+クリックの僅かな
+    -- 動きでもドラッグ扱いになり、quadgrid のドロップ配置が誤発火する。
+    -- 10px 動かすまでドラッグを開始しない。
+    binds = {
+        drag_threshold = 10,
     },
 
     -- Input
@@ -333,11 +346,16 @@ hl.bind(mainMod .. " + CTRL + up",    hl.dsp.window.resize({ x = 0,   y = -20, r
 hl.bind(mainMod .. " + CTRL + down",  hl.dsp.window.resize({ x = 0,   y = 20,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 下 +20px" })
 
 -- Mouse bindings
-hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true, desc = "マウスドラッグでウィンドウリサイズ" })
 if quadgrid then
-    -- quadgrid のタイルはドロップしたセルに配置 (drag = ドラッグ後のボタンリリースで発火)
-    hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag_end, { drag = true, desc = "quadgrid: ドロップ先セルに配置" })
+    -- quadgrid: 押下でウィンドウのドラッグを開始し、解放時 (release follow-up) に
+    -- ドロップ先のセルへ配置。先客の居るセルなら入れ替え、別モニタへのドロップは
+    -- C++ 側のワークスペース移動に従う (詳細は layouts/quadgrid.lua)。
+    -- ※ 押下用 (dispatcher) と解放用 (drag フラグ) の 2 bind に分けると、
+    --    押下を消費した bind が解放用 bind を shadow して発火しない
+    hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag, { mouse = true, desc = "quadgrid: ドラッグ&ドロップでセル移動" })
+else
+    hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 end
 
 -- Locked bindings - work on lock screen

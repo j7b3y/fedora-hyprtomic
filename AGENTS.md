@@ -50,8 +50,9 @@ agent config must not be committed.
    - exports container GUI binaries to `~/.local/bin` (hypremoji, hyprbind,
      fuzzel, wlogout, swappy, hyprpicker, rofi, clipse-gui, clipse),
    - registers the other distroboxes' `.desktop` files for the launcher in the
-     background (`hyprtomic-distrobox-apps`; `ujust refresh-distrobox-apps`
-     re-runs it),
+     background (`hyprtomic-distrobox-apps`; the
+     `hyprtomic-distrobox-apps.service` user unit keeps following container
+     starts, `ujust refresh-distrobox-apps` forces a pass),
    - builds the shell python venv (`~/.local/state/quickshell/.venv`) once,
    - passes the Wayland/Hyprland environment into the container and sets
      `XDG_DATA_DIRS` so DesktopEntries sees both container apps and host
@@ -106,11 +107,12 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 | GUI shell config | `~/.config/quickshell/ii` inside the container. Set `HYPRTOMIC_QS_CONFIG` on the host if the config name is not `ii` (passed through by `hyprtomic-gui-shell`, read by `hyprtomic-gui-session`). The config's internal scripts reference `~/.config/quickshell/ii/...` — keep that path. |
 | Terminal | The host ships `ghostty` (copr `scottames/ghostty`); its config falls back to a host CJK mono font (HackGen ships in the container only). The container keeps its own ghostty for shell actions, but its desktop entry is overridden in `/usr/local/share/applications/com.mitchellh.ghostty.desktop` to run `distrobox-host-exec ghostty`, so the launcher/rofi open the host terminal like `Super+Q`. |
 | Bar / notifications | quickshell owns the shelf / launcher / control-center / notifications / powermenu / OSD. waybar/dunst are **not** installed; `swaybg` (host) sets the wallpaper. The shelf's left button and `Super+Alt` (or the Henkan key) open the quickshell launcher; the bell at the right end opens the notification center (unread badge; history persisted to `~/.cache/quickshell/notifications.json`, opening the center marks it read); `rofi` (container, exported) remains for the `Super+Escape` window switcher. |
-| Launcher sources | The launcher has two single-line filter rows (horizontal scroll): a container/launch-source row above the app categories. Sources: `Flatpak`, the GUI container (`CONTAINER_ID`), other distroboxes registered by `hyprtomic-distrobox-apps`, and `Host` (`distrobox-host-exec` entries). The exporter writes standard `~/.local/share/applications/<container>-*.desktop` files with `Exec=distrobox-host-exec distrobox-enter -n <c> -- …` (the GUI container has no `distrobox` CLI), tags them with `X-HyprTomic-Container=` and prunes exports of deleted containers. |
+| Launcher sources | The launcher has two single-line filter rows (horizontal scroll): a container/launch-source row above the app categories. Sources: `Flatpak`, the GUI container (`CONTAINER_ID`), other distroboxes registered by `hyprtomic-distrobox-apps`, and `Host` (`distrobox-host-exec` entries). The exporter writes standard `~/.local/share/applications/<container>-*.desktop` files with `Exec=distrobox-host-exec distrobox-enter -n <c> -- …` (the GUI container has no `distrobox` CLI), tags them with `X-HyprTomic-Container=` and prunes exports of deleted containers. The exporter runs as the `hyprtomic-distrobox-apps.service` user unit (`--watch`, polls the running-container list) plus a one-shot at session start. It also mirrors container-home icons (Steam `steam_icon_*`) into `~/.local/share/icons/` and writes Steam cover art to `~/.local/share/hyprtomic/app-icons/` for games whose clienticon is tiny or missing. |
 | Clipboard / IME | `clipse` + `clipse-gui` (container AUR): the daemon is started by `hyprtomic-gui-session`, `Super+V` opens the GUI (exported). fcitx5 + mozkey-ibg-bin live in the container; the host env exports `GTK_IM_MODULE` / `QT_IM_MODULE` / `XMODIFIERS`. |
 | GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Bibata-Modern-Classic cursor (baked into the dconf db). Icons: Papirus-Dark on the host, Tela-circle-dark in the GUI container (see "Where the theme is consumed"). |
 | Python deps | The shell venv is built from `files/gui/usr/share/hyprtomic/uv-requirements.txt` (installed into the container at `/usr/share/hyprtomic/`, currently empty; `resolve-icons.py` needs only the container's python-gobject + gtk3). |
-| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. |
+| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. Startup / run-in-background permissions: `xdg-desktop-portal-gnome` provides `org.freedesktop.portal.Background` (the Hyprland and GTK backends do not; `files/system/etc/xdg/xdg-desktop-portal/portals.conf` routes only Background to it), `hyprtomic-gui-shell` seeds the empty `background/background` permission-store row so Flatseal's Background toggle is usable, and `dex -a` (autostart in `hyprland.lua`) runs `~/.config/autostart` entries at login. Discord Rich Presence: the same session script points `$XDG_RUNTIME_DIR/discord-ipc-0` at the installed flatpak client (Vesktop) and adds the matching global flatpak overrides. |
+| Bitwarden | The flatpak's "Unlock with system authentication" (`https://bitwarden.com/help/biometrics/`) checks the polkit action `com.bitwarden.Bitwarden.unlock`; a sandboxed install cannot set the policy up itself (the app only shows "Automatic setup not available" and links to the docs), so the image ships `files/system/usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy` with that action id. Keep it in sync with upstream `apps/desktop/resources/com.bitwarden.desktop.policy`; the authentication prompt comes from `hyprpolkitagent` (started by `hyprland.lua`). |
 | Licenses | Anything vendored into `/etc/skel` must ship its license under `files/system/usr/share/licenses/` and be listed in `THIRD-PARTY-NOTICES.md`. |
 
 Also keep in mind:
@@ -277,6 +279,17 @@ End-to-end: on a test machine, update the host image, reboot, run
 - Power actions in the power menu are forwarded to the host with
   `distrobox-host-exec systemctl …` (the GUI container is not booted with
   systemd).
+- Flatpak startup/background permissions work end to end: the Background portal
+  (`xdg-desktop-portal-gnome`, routed via
+  `/etc/xdg/xdg-desktop-portal/portals.conf`) serves app requests and Flatseal's
+  per-app Background toggle, and `dex -a` runs `~/.config/autostart` entries at
+  login. The GNOME backend's app-state monitor needs gnome-shell, so
+  background-app monitoring (kill/notify) stays inactive under Hyprland; the
+  permission grant, the autostart file and Flatseal are unaffected.
+- Discord Rich Presence works with flatpak clients (Vesktop): `hyprtomic-gui-shell`
+  points `$XDG_RUNTIME_DIR/discord-ipc-0` at the client's sandbox socket and adds
+  the matching global flatpak override, so games and apps can set presence. Only
+  Game SDK games work - process scanning cannot see other sandboxes.
 - The theme switcher keeps Hyprland, GTK, Qt/Kvantum, ghostty and rofi in sync
   (see "Theming"); `apply-theme.sh` runs on every shell start and on theme
   change.

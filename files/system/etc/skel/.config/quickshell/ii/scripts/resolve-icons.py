@@ -30,7 +30,8 @@ fallback art.
 Per-app overrides: a file named after the icon (e.g.
 `org.mozilla.firefox.png` or `.svg`) in `~/.local/share/hyprtomic/app-icons/`
 wins over the theme lookup. Use it when an app ships a low-resolution icon
-(some flatpak exports max out at 128px).
+(some flatpak exports max out at 128px). hyprtomic-distrobox-apps also drops
+Steam cover art there as `.jpg` when a game only ships a tiny clienticon.
 """
 
 from __future__ import annotations
@@ -99,7 +100,7 @@ def _override_icon(name: str) -> str | None:
     if "/" in name:
         return None
     root = os.path.expanduser("~/.local/share/hyprtomic/app-icons")
-    for ext in (".svg", ".png", ".webp"):
+    for ext in (".svg", ".png", ".webp", ".jpg", ".jpeg"):
         path = os.path.join(root, name + ext)
         if os.path.isfile(path) and os.access(path, os.R_OK):
             return path

@@ -1,12 +1,18 @@
 #%PAM-1.0
 #
-# HyprTomic: hyprlock authenticates fingerprints itself
-# (auth:fingerprint:enabled in ~/.config/hypr/hyprlock.conf) and talks to
-# fprintd directly, so this stack must not run pam_fprintd: it would claim the
-# reader, delay the password path and make hyprlock's own implementation lose
-# the device.  authselect's with-fingerprint feature only patches system-auth,
-# and password-auth is the password stack SDDM falls back to as well.
+# HyprTomic: bounded fingerprint attempts through PAM, not hyprlock's native
+# implementation (auth:fingerprint:enabled is off in hyprlock.conf). Native
+# holds the fprintd device for the whole lock session, which overheats this
+# sensor class (~3 min: "Device disabled to prevent overheating") and then
+# crashes hyprlock on unlock. Here each attempt runs at most timeout=10s and
+# releases the reader afterwards.
 #
-# The file replaces the hyprlock package's `auth include login`; keep it in
-# sync if the package starts shipping more than the auth stack.
+# Same empty-submit convention as SDDM: pam-fingerprint-gate skips pam_fprintd
+# when a password was typed (no fingerprint wait on the password path) and
+# runs one bounded fingerprint window when the field was submitted empty;
+# password-auth then rejects the empty password and hyprlock prompts again.
+# Native and PAM fingerprint must never be enabled together: both would claim
+# the reader.
+auth        [success=1 default=ignore] pam_exec.so quiet quiet_log expose_authtok /usr/libexec/hyprtomic/pam-fingerprint-gate
+auth        [success=done default=ignore] pam_fprintd.so timeout=10 max-tries=1
 auth        include     password-auth

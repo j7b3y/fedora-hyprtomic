@@ -1,9 +1,9 @@
 #!/bin/sh
-# HyprTomic PAM helper: decides whether SDDM falls back to the fingerprint
-# reader.
+# HyprTomic PAM helper: decides whether SDDM / hyprlock falls back to the
+# fingerprint reader.
 #
-# /etc/pam.d/sddm runs this through pam_exec.so with expose_authtok, so the
-# password submitted in the greeter arrives on stdin.  Exit 0 when it is
+# /etc/pam.d/sddm and /etc/pam.d/hyprlock run this through pam_exec.so with
+# expose_authtok, so the submitted password arrives on stdin.  Exit 0 when it
 # non-empty: the PAM stack then skips pam_fprintd and verifies the password
 # with password-auth.  Exit non-zero when the field was submitted empty: the
 # stack then runs pam_fprintd (with its own timeout) before failing.

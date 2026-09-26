@@ -132,9 +132,11 @@ export_container() {
 
             # First executable of an Exec= line, skipping leading VAR=
             # assignments and `env`, then outer double quotes and dirname.
+            # Assignments may be fully quoted (wine writes
+            # `env "WINEPREFIX=..." wine ...`), so accept that form too.
             # Used to test whether this container can actually run the entry.
             exec_binary() {
-                first="$(printf %s "$1" | sed -E "s/^((env|[A-Za-z_][A-Za-z0-9_]*=(\"([^\"]*)\"|[^ ]*)) +)*//")"
+                first="$(printf %s "$1" | sed -E "s/^((env|\"[A-Za-z_][A-Za-z0-9_]*=[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*=(\"[^\"]*\"|[^[:space:]]*))[[:space:]]+)*//")"
                 case "$first" in
                     "\""*)
                         first="$(printf %s "$first" | sed -e "s/^\"//" -e "s/\".*//")"
@@ -153,8 +155,13 @@ export_container() {
                 while IFS= read -r f; do
                     grep -q "^NoDisplay=true" "$f" && continue
                     grep -q "^Hidden=true" "$f" && continue
-                    # Never wrap an existing distrobox export/terminal entry.
-                    grep -q "^Exec=.*distrobox" "$f" && continue
+                    # Never wrap an entry that already runs through distrobox
+                    # (a distrobox-export result or a manual entry). Match the
+                    # distrobox commands, not the bare word: container homes
+                    # live under ~/distrobox/<name>/, so a wine WINEPREFIX or
+                    # an app installed into such a path would otherwise be
+                    # skipped.
+                    grep -qE "^Exec=(.*[[:space:]/])?distrobox(-(host-exec|enter|export))?([[:space:]]|\$)" "$f" && continue
                     exec_line="$(sed -n "s/^Exec=//p" "$f" | head -n 1)"
                     case "$f" in
                         "$HOME"/.local/share/applications/*)

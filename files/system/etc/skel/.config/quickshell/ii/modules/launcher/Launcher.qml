@@ -32,8 +32,12 @@ Scope {
     }
 
     // ── Filters: launch source/container (top row) + app category ──
+    // The container row intentionally has no "All" chip: showing every source
+    // at once only duplicated apps. Host entries (the ghostty override) are
+    // not offered either; the GUI container, Flatpak and the other distroboxes
+    // have their own chips.
     property string selectedCategory: "All Applications"
-    property string selectedContainer: "All"
+    property string selectedContainer: ""
 
     // The container the shell itself runs in (distrobox sets CONTAINER_ID).
     // Entries that do not name another launch source belong to it.
@@ -70,9 +74,9 @@ Scope {
     })
 
     // Assign each app to exactly one functional category.
-    // Launch sources (Flatpak, other containers, Host) are filtered separately
-    // by appMatchesContainer, so a flatpak app still shows up under Internet
-    // etc. "Wine" stays a category: it is a runtime, not a container.
+    // Launch sources (Flatpak, containers, Host entries) are filtered
+    // separately by appMatchesContainer, so a flatpak app still shows up under
+    // Internet etc. "Wine" stays a category: it is a runtime, not a container.
     function appCategory(entry) {
         var entryCats = entry.categories || [];
         for (var cat in categoryMap) {
@@ -93,9 +97,9 @@ Scope {
     }
 
     // ── Container / launch-source filter ─────────────────────────
-    // "Flatpak" (host), the GUI container itself, any other distrobox whose
-    // entries were registered by hyprtomic-distrobox-apps, and "Host" for
-    // distrobox-host-exec entries (host terminal etc.).
+    // Flatpak (host), the GUI container itself, and any other distrobox whose
+    // entries were registered by hyprtomic-distrobox-apps. Host entries
+    // (distrobox-host-exec) are not offered as a chip.
     function distroboxContainer(entry) {
         var exec = entry.execString || "";
         var m = exec.match(/distrobox-enter\s+(?:--rootful\s+)?(?:-n|--name)\s+([^\s'"]+)/);
@@ -115,8 +119,7 @@ Scope {
     }
 
     function appMatchesContainer(entry, container) {
-        if (container === "All") return true;
-        return containerOf(entry) === container;
+        return container !== "" && containerOf(entry) === container;
     }
 
     // Short chip labels for the category row (long names get abbreviated; the
@@ -143,7 +146,7 @@ Scope {
         for (var i = 0; i < allCats.length; i++) {
             var cat = allCats[i];
             for (var j = 0; j < allApps.length; j++) {
-                if (!appMatchesContainer(allApps[j], selectedContainer))
+                if (!appMatchesContainer(allApps[j], activeContainer))
                     continue;
                 if (appMatchesCategory(allApps[j], cat)) {
                     result.push(cat);
@@ -154,14 +157,15 @@ Scope {
         return result;
     }
 
-    // Containers/sources that actually have apps, in a stable order:
-    // All, the GUI container, Flatpak, other distroboxes (A-Z), Host.
+    // Containers/sources that actually have apps, in a stable order: the GUI
+    // container, Flatpak, other distroboxes (A-Z). "All" is not offered (it
+    // only duplicated apps) and Host entries are not offered either.
     readonly property var visibleContainers: {
         var present = {};
         for (var i = 0; i < allApps.length; i++)
             present[containerOf(allApps[i])] = true;
 
-        var result = ["All"];
+        var result = [];
         if (present[guiContainer]) result.push(guiContainer);
         if (present["Flatpak"]) result.push("Flatpak");
 
@@ -171,10 +175,16 @@ Scope {
                 others.push(name);
         }
         others.sort();
-        result = result.concat(others);
+        return result.concat(others);
+    }
 
-        if (present["Host"]) result.push("Host");
-        return result;
+    // The selected container, falling back to the first visible one: the chip
+    // row can be populated before any chip was clicked, and a source can
+    // disappear when a container stops exporting apps.
+    readonly property string activeContainer: {
+        if (selectedContainer !== "" && visibleContainers.indexOf(selectedContainer) >= 0)
+            return selectedContainer;
+        return visibleContainers.length > 0 ? visibleContainers[0] : "";
     }
 
     onVisibleCategoriesChanged: {
@@ -184,7 +194,7 @@ Scope {
 
     onVisibleContainersChanged: {
         if (visibleContainers.indexOf(selectedContainer) < 0)
-            selectedContainer = "All";
+            selectedContainer = "";
     }
 
     onSelectedCategoryChanged: {
@@ -426,7 +436,7 @@ Scope {
     property var filteredApps: {
         var query = searchText.toLowerCase();
         return allApps.filter(function(entry) {
-            if (!appMatchesContainer(entry, selectedContainer))
+            if (!appMatchesContainer(entry, activeContainer))
                 return false;
             if (!appMatchesCategory(entry, selectedCategory))
                 return false;
@@ -446,6 +456,16 @@ Scope {
         });
     }
 
+    // uwsm only resolves desktop entry ids matching
+    // [A-Za-z0-9_][A-Za-z0-9_.-]*. distrobox-export keeps the original file
+    // names, and Steam shortcuts contain spaces ("game-Buckshot Roulette"),
+    // which uwsm rejects with an "Invalid Desktop Entry ID" notification.
+    // Return "" for those so launchApp runs the entry's Exec instead.
+    function uwsmEntryArg(entry) {
+        var id = entry.id || "";
+        return /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(id) ? id + ".desktop" : "";
+    }
+
     // Each launch gets its own Process so that starting a new app never
     // sends SIGTERM to a previously-launched one. With `uwsm app -t scope`
     // (the default), the sh -c → uwsm → systemd-run --scope chain execs
@@ -462,9 +482,10 @@ Scope {
     // Flatpaks run on the HOST (the container has no flatpak binary), so those
     // are launched with distrobox-host-exec instead. Flatpak web apps are not
     // in the flatpak export list (their id is a web-app id), so their own Exec
-    // is forwarded to the host. Distrobox's own "enter <container>" entries and
-    // manual distrobox-export entries cannot go through uwsm (no `distrobox`
-    // CLI in the container), so they are forwarded too.
+    // is forwarded to the host. Entries whose Exec is still `distrobox enter`
+    // cannot go through uwsm (no `distrobox` CLI in the container) and are
+    // rewritten to `distrobox-host-exec distrobox-enter`. Exported entries run
+    // through uwsm by id, or by Exec when uwsm rejects the id.
     function launchApp(entry) {
         recordRecentApp(entry.name);
         var id = entry.id || "";
@@ -474,6 +495,7 @@ Scope {
             return;
         }
         var dbx = distroboxContainer(entry);
+        var entryArg = uwsmEntryArg(entry);
         var cmd;
         if (isFlatpak(entry)) {
             if (flatpakIds[id] === true)
@@ -485,14 +507,16 @@ Scope {
                 cmd = "distrobox-host-exec ghostty -e distrobox-enter -n '" + dbx + "'";
             else
                 cmd = "distrobox-host-exec " + hostDistroboxExec(exec);
-        } else if (id) {
+        } else if (entryArg !== "") {
             // -s a: pin to app-graphical.slice so the new scope sits next to
             // autostart apps (which we move into the same slice via the
             // app-@autostart.service.d/slice.conf drop-in), avoiding slice
             // boundary churn on launch.
-            cmd = "uwsm app -s a -- '" + id.replace(/'/g, "'\\''") + ".desktop'";
+            cmd = "uwsm app -s a -- '" + entryArg.replace(/'/g, "'\\''") + "'";
         } else {
-            cmd = "uwsm app -s a -- sh -c '" + exec.replace(/'/g, "'\\''") + "'";
+            // Id uwsm cannot resolve (e.g. the exported Steam shortcuts with
+            // spaces): run the entry's Exec through `uwsm app` instead.
+            cmd = "uwsm app -s a -- sh -c '" + stripFieldCodes(exec).replace(/'/g, "'\\''") + "'";
         }
         var proc = launchProcFactory.createObject(launcher, {
             "command": ["sh", "-c", cmd]
@@ -784,7 +808,7 @@ Scope {
                                 Layout.preferredHeight: 28
                                 visible: launcher.visibleContainers.length > 1
                                 model: launcher.visibleContainers
-                                selected: launcher.selectedContainer
+                                selected: launcher.activeContainer
                                 onActivated: (value) => launcher.selectedContainer = value
                             }
 

@@ -130,14 +130,48 @@ export_container() {
                 done
             }
 
+            # First executable of an Exec= line, skipping leading VAR=
+            # assignments and `env`, then outer double quotes and dirname.
+            # Used to test whether this container can actually run the entry.
+            exec_binary() {
+                first="$(printf %s "$1" | sed -E "s/^((env|[A-Za-z_][A-Za-z0-9_]*=(\"([^\"]*)\"|[^ ]*)) +)*//")"
+                case "$first" in
+                    "\""*)
+                        first="$(printf %s "$first" | sed -e "s/^\"//" -e "s/\".*//")"
+                        ;;
+                    *) first="${first%% *}" ;;
+                esac
+                printf %s "${first##*/}"
+            }
+
+            # Wine (and friends) install menu entries in subdirectories
+            # (~/.local/share/applications/wine/Programs/...), so scan
+            # recursively instead of only the top level.
             for dir in "$HOME/.local/share/applications" /usr/local/share/applications /usr/share/applications; do
                 [ -d "$dir" ] || continue
-                for f in "$dir"/*.desktop; do
-                    [ -f "$f" ] || continue
+                find "$dir" -type f -name "*.desktop" 2>/dev/null |
+                while IFS= read -r f; do
                     grep -q "^NoDisplay=true" "$f" && continue
                     grep -q "^Hidden=true" "$f" && continue
                     # Never wrap an existing distrobox export/terminal entry.
                     grep -q "^Exec=.*distrobox" "$f" && continue
+                    exec_line="$(sed -n "s/^Exec=//p" "$f" | head -n 1)"
+                    case "$f" in
+                        "$HOME"/.local/share/applications/*)
+                            # Shared home ($host_home == $HOME) also holds the
+                            # host entries and every other container entries. Only
+                            # wrap what this container can actually run, so one
+                            # container never registers the apps of another one
+                            # (or the host ones) under its own name. Entries
+                            # without Exec (e.g. Type=Link) keep the old
+                            # behaviour.
+                            if [ "$host_home" = "$HOME" ] && [ -n "$exec_line" ]; then
+                                bin="$(exec_binary "$exec_line")"
+                                [ -n "$bin" ] || continue
+                                command -v "$bin" >/dev/null 2>&1 || continue
+                            fi
+                            ;;
+                    esac
                     icon="$(sed -n "s/^Icon=//p" "$f" | head -n 1)"
                     # Steam games it has no icon for point at Icon=steam; treat
                     # them as the per-game icon (fix_steam_icons renames the

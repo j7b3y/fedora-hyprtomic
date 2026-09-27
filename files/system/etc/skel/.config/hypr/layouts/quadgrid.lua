@@ -32,7 +32,7 @@ local M = {}
 M.LAYOUT_NAME = "lua:quadgrid"
 
 local cellOf = {} -- window address → セル番号 (行優先: 1=左上 2=右上 3=左下 4=右下)
-local PREFER = { 4, 3, 2, 1 } -- 空きセルの割当順 (右下アンカー)
+local PREFER = { 4, 1, 3, 2 } -- 空きセルの割当順 (右下アンカー)
 
 -- セル内の並び順 (小さいほど先頭 = 大きい区画)。同じセル内の入れ替えは
 -- この連番を交換して行う。初出時に target 順で振るので、既定の並びは

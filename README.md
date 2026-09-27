@@ -28,7 +28,7 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 ## できること
 
 - **シェル**（quickshell, 画面下）: 左のランチャーボタン、中央の 1〜10 ワークスペースページャ、右に `[トレイ][Wi-Fi/BT/バッテリー/音量][時計]`。
-- **ランチャー**: アプリ一覧の上に「コンテナ（All / hyprtomic-gui / Flatpak / 他の distrobox / Host）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します（`ujust refresh-distrobox-apps` で再登録）。
+- **ランチャー**: アプリ一覧の上に「コンテナ（hyprtomic-gui / Flatpak / 他の distrobox）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。コンテナ側は最初のソースが選択され（All は重複表示が多いため廃止、Host は ghostty のみなので廃止。ghostty は `Super+Q`）、他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します（`ujust refresh-distrobox-apps` で再登録）。
 - **コントロールセンター**: Wi-Fi / Bluetooth / 機内モード / テーマ切替 / 音量 / 輝度。
 - **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
 - **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。

@@ -80,7 +80,4 @@ for f in ~/.config/zshrc.d/*.zsh(N) ~/.config/zshrc.d/*.sh(N); do
 done
 
 # Bitwarden SSH agent
-export SSH_AUTH_SOCK=~/.bitwarden-ssh-agent.sock
-
-# opencode
-[ -d "$HOME/.opencode/bin" ] && export PATH="$HOME/.opencode/bin:$PATH"
+export SSH_AUTH_SOCK=~/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Haruna
+Name[ja]=Haruna
+GenericName=Media Player
+GenericName[ja]=メディアプレイヤー
+Comment=Video player built with Qt/QML on top of libmpv
+Comment[ja]=Qt/QML と libmpv で作られた動画プレイヤー
+Exec=haruna %U
+Icon=haruna
+Terminal=false
+StartupNotify=true
+Categories=Qt;KDE;AudioVideo;Player;Video;TV;
+MimeType=video/mp4;video/x-matroska;video/mpeg;video/ogg;video/quicktime;video/vnd.avi;video/mp2t;video/webm;video/x-ms-wmv;audio/aac;audio/ac3;audio/flac;audio/mp4;audio/mpeg;audio/ogg;audio/vnd.wave;audio/webm;audio/x-matroska;audio/x-mpegurl;
+X-KDE-Protocols=ftp,http,https,mms,rtmp,rtsp,sftp,srt

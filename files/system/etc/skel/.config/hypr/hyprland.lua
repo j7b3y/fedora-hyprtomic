@@ -384,7 +384,7 @@ hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("hypremoji"),   { desc = "絵文
 -- Window rules
 hl.window_rule({
     name    = "opacity-apps",
-    match   = { class = "^(google-chrome|nemo|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager|nwg-look|org.gnome.FileRoller|org.fcitx.fcitx5-config-qt)$" },
+    match   = { class = "^(google-chrome|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager|nwg-look|org.gnome.FileRoller|org.fcitx.fcitx5-config-qt)$" },
     opacity = 0.925,
 })
 
@@ -404,9 +404,19 @@ hl.window_rule({
 })
 
 hl.window_rule({
+    name    = "float-nemo",
+    match   = { class = "nemo" },
+    float   = true,
+    size    = "(monitor_w*0.3) (monitor_h*0.35)",
+    opacity = 0.9,
+})
+
+hl.window_rule({
     name  = "float-utils",
-    match = { class = "^(authentication-agent|Rustdesk|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager)$" },
+    match = { class = "^(authentication-agent|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager)$" },
     float = true,
+    size  = "(monitor_w*0.3) (monitor_h*0.35)",
+
 })
 
 hl.window_rule({

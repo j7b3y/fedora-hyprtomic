@@ -32,10 +32,11 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 - **コントロールセンター**: Wi-Fi / Bluetooth / 機内モード / テーマ切替 / 音量 / 輝度。
 - **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
 - **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。
+- **動画再生**: Haruna（Qt6/QML + libmpv）を GUI コンテナに同梱。テーマ（Kirigami 配色は kdeglobals、ウィジェットは qt6ct/Kvantum）に追従し、MPRIS 対応でメディアキー・`playerctl` から操作できます。ランチャーから起動できるほか、ホストの nemo でのダブルクリックや `xdg-open` でも開けます（ハンドラが未設定の動画・音声 MIME にだけ既定登録されます）。
 - **Flatpak**: ホスト側（system）で管理。ランチャーからは `distrobox-host-exec flatpak run …` 経由で起動。
 - **Flatpak の権限**: バックグラウンド実行・自動起動（スタートアップ）は Background ポータル（`xdg-desktop-portal-gnome`）が担当し、Flatseal の「Background」トグルで設定できます。アプリが登録した自動起動はログイン時に `dex` が実行します。
 - **Discord Rich Presence**: flatpak の Vesktop に他アプリ／ゲームのプレゼンスを通知できます（`hyprtomic-gui-shell` が `$XDG_RUNTIME_DIR/discord-ipc-0` をクライアントのソケットへリンクし、flatpak 全体に必要な override を付与）。
-- **テーマ**: `apply-theme.sh` が Hyprland / GTK3/4 / Qt（qt6ct + Kvantum）/ ghostty / rofi / シェル配色を同期。6 種類の md3 テーマをコントロールセンターから切替。アイコンはコンテナが Tela-circle-dark、ホストが Papirus-Dark。
+- **テーマ**: `apply-theme.sh` が Hyprland / GTK3/4 / Qt（qt6ct + Kvantum）/ KDE（Haruna などの Kirigami/KColorScheme アプリ）/ ghostty / rofi / シェル配色を同期。6 種類の md3 テーマをコントロールセンターから切替。アイコンはコンテナが Tela-circle-dark、ホストが Papirus-Dark。
 - **オーディオ / ネットワーク / Bluetooth**: PipeWire・NetworkManager・BlueZ はホスト側。
 
 ## インストール
@@ -162,9 +163,17 @@ hl.bind("SUPER + C", hl.dsp.exec_cmd("flatpak run com.brave.Browser"), { desc = 
 - モニタ配置は GUI の `nwg-displays`（ランチャーから起動）でも設定でき、`monitors.lua` / `workspaces.lua` に保存されます。削除すれば自動検出に戻ります。
 - `local.conf` は `overwrite=1` の同期でも消えないので、マシン固有の設定はすべてここへ。
 
+### ホスト名
+
+ホスト名はイメージに固定されていません。インストール時に設定した名前（未入力なら os-release の `DEFAULT_HOSTNAME` = `hyprtomic`）がそのまま使われ、変更はユーザー側で行います。`/etc/hostname` は ostree のデプロイ間で共有されるため、変更はイメージ更新後も維持されます。
+
+```bash
+sudo hostnamectl set-hostname my-hyprtomic
+```
+
 ### テーマとアイコン
 
-- テーマ切替はコントロールセンターのテーマページから。`apply-theme.sh` が Hyprland / GTK / Qt(Kvantum) / ghostty / rofi に反映します。
+- テーマ切替はコントロールセンターのテーマページから。`apply-theme.sh` が Hyprland / GTK / Qt(Kvantum) / KDE(kdeglobals, Haruna・kdialog など) / ghostty / rofi に反映します。
 - アプリ個別のアイコンを差し替えたい場合は `~/.local/share/hyprtomic/app-icons/<icon-name>.svg|png` に置いてください（テーマ検索より優先されます）。再ログインで反映。
 
 ### 環境変数

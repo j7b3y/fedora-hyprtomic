@@ -140,13 +140,14 @@ modules:
       - install-sddm-theme.sh
       - finalize.sh
 
-  # 5. Enable firstboot/session services (hostname, user groups, zsh default;
-  #    user units: the ydotool daemon, mirroring upstream, plus distrobox app
-  #    registration for the launcher)
+  # 5. Enable firstboot/session services (user groups, zsh default; user units:
+  #    the ydotool daemon, mirroring upstream, plus distrobox app registration
+  #    for the launcher). The hostname is not managed here: the installer's
+  #    name (or `hostnamectl set-hostname`) is used and persists in /etc
+  #    (see README, "ホスト名").
   - type: systemd
     system:
       enabled:
-        - hyprtomic-hostname.service
         - hyprtomic-groups.service
         - hyprtomic-zsh-default.service
     user:

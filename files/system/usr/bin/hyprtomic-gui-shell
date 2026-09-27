@@ -43,6 +43,39 @@ remove_stale_ghostty_shim() {
     fi
 }
 
+# Haruna (GUI container) is the video player for both sides: the desktop entry
+# shipped in skel is visible to the host (shared $HOME), and its Exec=haruna
+# resolves through the exported shim. Point the MIME types it declares at it,
+# but only where no handler is set yet, so a user's own choice (a flatpak
+# player, another default) is never overwritten. gio/glib exists on the host
+# and in the container; the shared ~/.config/mimeapps.list serves both.
+register_haruna_mimes() {
+    local entry="$HOME/.local/share/applications/org.kde.haruna.desktop"
+    [ -f "$entry" ] || return 0
+    [ -x "$HOME/.local/bin/haruna" ] || return 0
+    command -v gio >/dev/null 2>&1 || return 0
+
+    local mimes mime line
+    mimes="$(sed -n 's/^MimeType=//p' "$entry")"
+    mimes="${mimes%%$'\n'*}"
+    [ -n "$mimes" ] || return 0
+
+    local IFS=';'
+    for mime in $mimes; do
+        [ -n "$mime" ] || continue
+        # "Default application for ...: <id>.desktop" when one is set; the
+        # "no default" wording varies across glib versions, so look for the
+        # id instead of parsing the message. No `head` here: pipefail would
+        # turn its SIGPIPE into a nonzero pipeline status.
+        line="$(LC_ALL=C gio mime "$mime" 2>/dev/null)"
+        line="${line%%$'\n'*}"
+        case "$line" in
+            *".desktop"*) continue ;;
+        esac
+        gio mime "$mime" org.kde.haruna.desktop >/dev/null 2>&1 || true
+    done
+}
+
 # BlueBuild's post_build wipes /var in the image (ostree assumption), so the
 # standard skeleton and a machine-id are (re)created once inside the container.
 init_container() {
@@ -55,12 +88,14 @@ init_container() {
 
     # Expose container-side GUI tools on the host PATH (shims that re-enter the
     # container) so Hyprland keybinds/scripts can call them transparently.
+    # `haruna` is here for the desktop entry in skel (Exec=haruna), which is
+    # what lets host nemo / xdg-open open videos with the container's player.
     # ghostty is NOT exported: the host has its own ghostty (install-ghostty.sh
     # via the scottames/ghostty COPR), and a container shim here would shadow it
     # on PATH and turn Super+Q into an Arch-container shell.
     distrobox enter "$CONTAINER" -- bash -lc '
         for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
-                   rofi clipse-gui clipse nwg-displays; do
+                   rofi clipse-gui clipse nwg-displays haruna; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
@@ -79,6 +114,11 @@ init_container() {
                 -r /usr/share/hyprtomic/uv-requirements.txt
         fi
     '
+
+    # Make the just-exported Haruna the video handler right away (no need to
+    # wait for the next login); a no-op while the skel desktop entry is still
+    # missing.
+    register_haruna_mimes
 }
 
 ensure() {
@@ -169,6 +209,10 @@ case "${1:-}" in
     "" )
         ensure || exit 1
         remove_stale_ghostty_shim
+        # Covers the skel sync that first brought the Haruna desktop entry (and
+        # host updates in general). Only MIME types without a handler yet are
+        # touched. The flatpak/Discord setup further down is unrelated.
+        register_haruna_mimes
         # Chromium/Electron flatpaks lose the host fonts under flatpak >= 1.18
         # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
         # apps must be restarted to pick the fix up.

@@ -27,6 +27,12 @@ PACMAN_PKGS=(
   kdialog kirigami syntax-highlighting matugen
   # audio / video clients (daemons live on the host)
   pavucontrol
+  # video player (Qt6/QML on libmpv). Follows the desktop theme (Kirigami
+  # colors from the generated kdeglobals, widgets from qt6ct/Kvantum) and
+  # speaks MPRIS, so playerctl / the media keys control it. The skel desktop
+  # entry makes it the host's handler for video files too (nemo / xdg-open;
+  # see hyprtomic-gui-shell).
+  haruna
   # session helpers used by the shell (systemd/hyprland sockets are shared)
   uwsm           # launcher starts apps via `uwsm app` scopes
   networkmanager # nmcli client; the daemon runs on the host (see DBUS_SYSTEM_BUS_ADDRESS)

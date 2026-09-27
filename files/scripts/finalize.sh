@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -oue pipefail
-chmod +x /usr/libexec/hyprtomic/setup-hostname.sh
 chmod +x /usr/libexec/hyprtomic/setup-zsh.sh
 chmod +x /usr/libexec/hyprtomic/setup-groups.sh
 chmod +x /usr/libexec/hyprtomic/pam-fingerprint-gate

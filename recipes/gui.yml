@@ -7,11 +7,11 @@ description: Arch-based HyprTomic GUI container (GUI foundation/apps) run via di
 # host. BlueBuild's non-Fedora support is experimental and targets bootc images;
 # this recipe intentionally uses only base-agnostic modules.
 #
-# The package steps use `containerfile` snippets (COPY+RUN of a single script)
-# rather than the `script` module: the latter bind-mounts the whole repo files/
-# tree, so any dotfile/script edit invalidated every layer including the
-# expensive quickshell compile. COPY'ing only the relevant script keeps each
-# package layer cached independently.
+# The package steps use `containerfile` snippets (COPY+RUN of only the files
+# that step needs) rather than the `script` module: the latter bind-mounts the
+# whole repo files/ tree, so any dotfile/script edit invalidated every layer
+# including the expensive quickshell compile. COPY'ing only the relevant files
+# keeps each package layer cached independently.
 base-image: archlinux
 image-version: latest
 # Do not install the BlueBuild CLI into the image (it assumes a bootable Fedora
@@ -23,7 +23,10 @@ modules:
   - type: containerfile
     snippets:
       - |
-        COPY files/gui-build/scripts/gui-02-quickshell.sh /tmp/gui-02-quickshell.sh
+        COPY files/gui-build/scripts/gui-02-quickshell.sh \
+             files/gui-build/scripts/gui-02-quickshell-apply-patches.sh \
+             /tmp/
+        COPY files/gui-build/patches/ /tmp/quickshell-patches/
         RUN bash /tmp/gui-02-quickshell.sh
 
   # 2. Official Arch packages (base tooling, GUI apps, Qt6 stack, fonts, IME).

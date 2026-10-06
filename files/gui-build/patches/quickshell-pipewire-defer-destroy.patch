@@ -1,0 +1,50 @@
+From: HyprTomic maintenance <noreply@example.invalid>
+Subject: [PATCH] pipewire: defer destruction out of the "destroying" emission
+
+quickshell segfaults (SIGSEGV) whenever a tracked PipeWire object that is
+the current default sink is removed (e.g. Sunshine's virtual
+"sink-sunshine-stereo" sink is unloaded when the host stops streaming, a
+Bluetooth/USB audio device disconnects, ...).
+
+Crash report log tail:
+
+    Unbinding object PwNode(0x..., id=<n>/bound)
+    Destroying object PwNode(0x..., id=<n>/unbound)
+    INFO quickshell.service.pipewire.defaults: Default configured sink destroyed.
+
+Stack: PwBindableObject::safeDestroy() -> emit destroying() ->
+PwObjectIface::onObjectDestroying() (`delete this`) and the defaults
+tracker handlers run inside the same emission; any QML endpoint invoked in
+that window (bindings on Pipewire.defaultAudioSink, Pipewire.nodes model
+consumers, ...) is evaluated while QML state is already being freed and
+crashes in QV4 (lookupSingletonProperty / memcpy).
+
+Fix: never delete either object from inside the signal emission. Both the
+QML-facing interface and the pipewire object are removed on the next event
+loop turn instead, so the emission (and the QML side effects it triggers)
+complete with live objects.
+
+--- a/src/services/pipewire/qml.cpp
++++ b/src/services/pipewire/qml.cpp
+@@ -25,7 +25,7 @@ PwObjectIface::PwObjectIface(PwBindableObject* object): QObject(object), object(
+ 	QObject::connect(object, &PwBindableObject::destroying, this, &PwObjectIface::onObjectDestroying);
+ }
+ 
+-void PwObjectIface::onObjectDestroying() { delete this; }
++void PwObjectIface::onObjectDestroying() { this->deleteLater(); }
+ 
+ void PwObjectIface::ref() {
+ 	this->refcount++;
+--- a/src/services/pipewire/registry.cpp
++++ b/src/services/pipewire/registry.cpp
+@@ -46,7 +46,9 @@ void PwBindableObject::safeDestroy() {
+ 	qCDebug(logRegistry) << "Destroying object" << this;
+ 	emit this->destroying(this);
+ 	this->id = 0;
+-	delete this;
++	// quickshell patch: defer deletion so QML endpoints invoked during the
++	// destroying emission cannot touch freed state (segfault workaround).
++	this->deleteLater();
+ }
+ 
+ void PwBindableObject::debugId(QDebug& debug) const {

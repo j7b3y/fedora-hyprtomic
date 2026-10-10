@@ -1,4 +1,4 @@
-# HyprTomic &nbsp; [![host image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml) [![gui image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml)
+# HyprTomic &nbsp; [![host image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml) [![vypr image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/vypr.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/vypr.yml) [![gui image](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/gui.yml)
 
 Fedora Atomic（wayblue ベース）の **ホスト** と、Arch Linux の **GUI コンテナ**（distrobox）を組み合わせた個人向け Hyprland デスクトップイメージです。
 GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポジタとシステムサービスだけを持ちます。
@@ -6,6 +6,7 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 | レイヤ | 中身 | イメージ |
 |---|---|---|
 | **ホスト** | Fedora Atomic + Hyprland / SDDM / システムサービス / CLI | `ghcr.io/j7b3y/fedora-hyprtomic:latest` |
+| **ホスト (Vypr)** | ホスト + Vypr（Windows VM のウィンドウをネイティブ表示）+ libvirt/QEMU スタック | `ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr` |
 | **GUIコンテナ** | Arch Linux distrobox（quickshell, Qt6, GUIアプリ, IME, クリップボード） | `ghcr.io/j7b3y/hyprtomic-gui:latest` |
 | **dotfiles** | `/etc/skel` に同梱。`ujust sync-skel-config` で `$HOME` へ | `files/system/etc/skel/**` |
 
@@ -38,6 +39,46 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 - **Discord Rich Presence**: flatpak の Vesktop に他アプリ／ゲームのプレゼンスを通知できます（`hyprtomic-gui-shell` が `$XDG_RUNTIME_DIR/discord-ipc-0` をクライアントのソケットへリンクし、flatpak 全体に必要な override を付与）。
 - **テーマ**: `apply-theme.sh` が Hyprland / GTK3/4 / Qt（qt6ct + Kvantum）/ KDE（Haruna などの Kirigami/KColorScheme アプリ）/ ghostty / rofi / シェル配色を同期。6 種類の md3 テーマをコントロールセンターから切替。アイコンはコンテナが Tela-circle-dark、ホストが Papirus-Dark。
 - **オーディオ / ネットワーク / Bluetooth**: PipeWire・NetworkManager・BlueZ はホスト側。
+
+## Vypr（`latest-vypr` イメージ）
+
+[Vypr](https://github.com/Amzi-01/Vypr) は、libvirt の Windows VM 内のアプリを 1 アプリ = 1 ネイティブウィンドウとして Linux デスクトップに表示するツールです（RDP やコーデックなし、パススルー GPU のフレームを共有メモリ経由で表示）。`latest-vypr` イメージには Vypr 本体と libvirt/QEMU/virtiofsd/virt-manager が同梱され、`latest` イメージは従来どおり軽量なままです。どちらも同じリポジトリの別タグなので、`rpm-ostree` の rebase/upgrade で取り違えることはありません。
+
+- バイナリは [v0.5.0](https://github.com/Amzi-01/Vypr/releases/tag/v0.5.0) に固定してビルド時にコンパイルし、同タグの `vypr-setup.exe`（Windows 側インストーラー）も `/usr/share/vypr/` に同梱します。プロトコルが両側で一致します。
+- ホスト側のセットアップ（VM 構成 + ゲスト準備）は `ujust vypr-setup` で任意のタイミングで実行できます。冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。
+
+```bash
+# 1. ホストを latest-vypr へ（既存 latest からの切り替え）
+sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr
+systemctl reboot
+
+# 2. VM 構成 + ホスト→ゲスト鍵 + 設定（何度でも再実行可）
+ujust vypr-setup
+
+# 3. ゲスト側: vypr-setup.exe を ~/Downloads へ出して公開鍵を表示
+ujust vypr-guest-exe
+
+# 4. Windows にコピーして実行 → 公開鍵を貼り付け → Windows 再起動
+# 5. アプリ登録（VM が起動していなければ起動します）
+ujust vypr-detect            # ゲストのショートカット/Steam を検出して選択
+# または: vypr add fivem 'C:\Users\You\Desktop\FiveM.lnk' --name FiveM
+```
+
+- 登録したアプリは `~/.local/share/applications/vypr-<app>.desktop` に書かれ、`$HOME` 共有経由でランチャーの「コンテナ（hyprtomic-gui）」ソースにそのまま並びます。GUI コンテナ内の `/usr/bin/vypr` は `distrobox-host-exec` でホストの実体へ転送するので、ランチャーからも通常のホストターミナルからも同じエントリで起動できます。
+- Hyprland では `vypr-*` ウィンドウを既定で **float** にし（サイズはゲスト側が所有するため）、`idle_inhibit=focus` と `no_blur` を付けています（`hyprland.lua` の `float-vypr` ルール。ゲームもウィンドウ表示前提）。変更したい場合は `local.conf` で上書きできます。
+
+### セットアップの中身と、atomic 更新・パススルーへの答え
+
+- **設定の保存先**（イメージ更新で消えません）:
+  - `~/.config/vypr/config`、`~/.config/vypr/apps/`、`~/.ssh/vypr-guest*`、登録済み `.desktop`/アイコン → `$HOME`（`/var/home`）。`ujust sync-skel-config overwrite=1` でも触りません（skel に同梱していないため）。
+  - libvirt のドメイン XML → `/etc/libvirt/qemu/`（可変の `/etc`、ostree 更新後も維持）。
+  - `/etc/libvirt/qemu.conf`、`/etc/libvirt/hooks/qemu`、`/etc/modprobe.d/` → 同じく `/etc`。`hyprtomic-vypr-setup` は qemu.conf を編集する前に `qemu.conf.hyprtomic-vypr.bak` を残します。
+  - Vypr のバイナリ（`/usr/bin/vypr*`、`/usr/share/vypr/`）だけがイメージ管理で、更新に追従します。**ユーザー設定はイメージ更新の対象外**です。
+- **PCIe パススルー / IOMMU**:
+  - IOMMU のカーネル引数は `ujust vypr-setup` が不足時に検出して `rpm-ostree kargs --append-if-missing=intel_iommu=on iommu=pt`（AMD は `amd_iommu=on`）を提案・実行します。解除は `sudo rpm-ostree kargs --delete=...`。デプロイ単位で保持されます。
+  - vfio-pci へのブート時バインドは `/etc/modprobe.d/vfio.conf`（可変 `/etc`）で行い、解除も同じファイルの削除で済みます。initramfs は `rpm-ostree initramfs --enable` で再生成します。
+  - ブート時にカードを渡したくない場合は Vypr の GPU swap（`ujust vypr-gpu-swap` が手順を表示。libvirt フックを `/etc/libvirt/hooks/qemu` に置く方式）が使えます。どちらもイメージ更新に上書きされません。
+- **注意**: `vypr-setup.exe` を実行した Windows は「Lock pages in memory」権限と自動ログイン、SSH サーバー、任意で UAC 無効化（`OPEN_ELEVATION=1`）が設定されます。UAC の無効化は VM のセキュリティを下げるので、`vypr open-elevation --remove` で戻せます。`ujust vypr-doctor` が現在の状態を確認できます。
 
 ## インストール
 
@@ -124,6 +165,9 @@ sudo btrfs filesystem defragment -r -czstd /var
 # ホストイメージ（dotfiles も /etc/skel 経由で更新される）
 sudo rpm-ostree upgrade && systemctl reboot
 
+# latest-vypr を使っている場合も同じ（同じリポジトリの別タグ）
+# sudo rpm-ostree upgrade && systemctl reboot
+
 # ホスト更新後: dotfiles を $HOME へ反映して再ログイン
 ujust overwrite=1 sync-skel-config
 
@@ -190,6 +234,7 @@ sudo hostnamectl set-hostname my-hyprtomic
 - [BlueBuild](https://blue-build.org/) — イメージのビルドと CI（recipe / modules）
 - [wayblue](https://github.com/wayblueorg/wayblue) — ホストのベースイメージ
 - [Universal Blue](https://universal-blue.org/) — ujust・flatpak まわりの基盤
+- [Amzi-01/Vypr](https://github.com/Amzi-01/Vypr) — Windows VM アプリのネイティブウィンドウ表示（`latest-vypr` イメージ、Unlicense）
 - [quickshell](https://quickshell.org/) / [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) — シェル（`ii`）の元
 - [Tela-circle](https://github.com/vinceliuice/Tela-circle-icon-theme)（アイコン）、[Bibata](https://github.com/ful1e5/Bibata_Cursor)（カーソル）、[Catppuccin](https://github.com/catppuccin/kvantum)（Kvantum テーマ）
 
@@ -197,12 +242,16 @@ sudo hostnamectl set-hostname my-hyprtomic
 
 | パス | 役割 |
 |---|---|
-| `recipes/recipe.yml` | ホストイメージ: パッケージ、os-release、ビルドスクリプト、既定 flatpak |
+| `recipes/recipe.yml` | ホストイメージ（`latest`）: 共通モジュール + 署名 |
+| `recipes/recipe-vypr.yml` | Vypr ホストイメージ（`latest-vypr`）: 共通モジュール + Vypr バイナリ/スタック |
+| `recipes/recipe-common-packages.yml` | 両ホストイメージ共通の os-release + パッケージ層 |
+| `recipes/recipe-common-dotfiles.yml` | 両ホストイメージ共通の skel/スクリプト/サービス/flatpak 層 |
 | `recipes/gui.yml` | GUI コンテナイメージ: パッケージレイヤとセッション用アセット |
 | `files/system/**` | ホストイメージの `/` へコピー（skel dotfiles、systemd ユニット、`hyprtomic-gui-shell`、SDDM アセット、ujust レシピ） |
-| `files/scripts/**` | ホストのビルド時スクリプト |
+| `files/vypr/**` | `latest-vypr` のみの `/` へコピー（`hyprtomic-vypr-setup`、ujust フラグメント） |
+| `files/scripts/**` | ホストのビルド時スクリプト（`vypr-build.sh` は Vypr のビルドステージ用） |
 | `files/gui-build/scripts/gui-*.sh` | GUI コンテナのビルドスクリプト（パッケージレイヤごと） |
-| `files/gui/**` | GUI コンテナの `/` へコピー（セッション起動スクリプト、dconf など） |
+| `files/gui/**` | GUI コンテナの `/` へコピー（セッション起動スクリプト、dconf、`vypr` 転送シムなど） |
 | `AGENTS.md` | アーキテクチャ、dotfiles の統合契約、テーマの流れ、変更ルール |
 
 `docs/` と `opencode.json(c)` は意図的に gitignore しています。

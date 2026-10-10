@@ -7,8 +7,13 @@ anything.
 
 ## TL;DR
 
-- **Host** (`recipes/recipe.yml` → `ghcr.io/j7b3y/fedora-hyprtomic`): Fedora
-  Atomic base + Hyprland/SDDM session, system services, host CLI tools.
+- **Host** (`recipes/recipe.yml` → `ghcr.io/j7b3y/fedora-hyprtomic:latest`): Fedora
+  Atomic base + Hyprland/SDDM session, system services, host CLI tools. Both
+  host recipes share `recipes/recipe-common-packages.yml` +
+  `recipes/recipe-common-dotfiles.yml`; `recipes/recipe-vypr.yml` adds Vypr
+  and the libvirt/QEMU stack and publishes the same repository under
+  `:latest-vypr` (`alt-tags`), so the variants can never be upgraded into one
+  another by accident.
 - **GUI container** (`recipes/gui.yml` → `ghcr.io/j7b3y/hyprtomic-gui`): an Arch
   distrobox container that carries the GUI foundation (quickshell, Qt6) and the
   GUI apps. It is started from the host by `hyprtomic-gui-shell`.
@@ -26,13 +31,18 @@ anything.
 
 | Path | Purpose |
 |---|---|
-| `recipes/recipe.yml` | Host image: package list, os-release rebrand, firstboot services, default flatpaks |
+| `recipes/recipe.yml` | Host image (`:latest`): common modules + signing |
+| `recipes/recipe-vypr.yml` | Vypr host image (`:latest-vypr`): common modules + Vypr build stage + libvirt/QEMU stack |
+| `recipes/recipe-common-packages.yml` | Shared host os-release + package layer (both host images) |
+| `recipes/recipe-common-dotfiles.yml` | Shared host skel/scripts/systemd/flatpak layer (both host images) |
 | `recipes/gui.yml` | GUI container image: package layers + session asset |
 | `files/system/**` | Copied verbatim to `/` of the host image (skel dotfiles, systemd units, `hyprtomic-gui-shell`, SDDM assets, polkit rule, ujust recipe) |
-| `files/scripts/**` | Host build-time scripts (run inside the image build; referenced by bare name from `recipe.yml`) |
+| `files/vypr/**` | Copied verbatim to `/` of the **Vypr image only** (`hyprtomic-vypr-setup`, ujust fragment; folded into 60-custom.just by `vypr-finalize.sh`) |
+| `files/scripts/**` | Host build-time scripts (run inside the image build; referenced by bare name from `recipe.yml`). `vypr-build.sh` runs in the Vypr build stage; `vypr-finalize.sh` only in the Vypr image |
 | `files/gui-build/scripts/gui-*.sh` | GUI container build scripts, one per package layer (see below) |
-| `files/gui/**` | Copied verbatim to `/` of the **GUI container** (session entrypoint, python requirements) |
+| `files/gui/**` | Copied verbatim to `/` of the **GUI container** (session entrypoint, python requirements, the `vypr` host-exec shim) |
 | `.github/workflows/build.yml` | Host image CI (paths-filtered) |
+| `.github/workflows/vypr.yml` | Vypr host image CI (paths-filtered) |
 | `.github/workflows/gui.yml` | GUI container CI (paths-filtered, expensive) |
 
 `docs/` and `opencode.json(c)` are intentionally gitignored: local notes and
@@ -189,23 +199,80 @@ Where the theme is consumed:
   and via `ujust fix-flatpak-fonts`. Firefox uses the runtime fontconfig and is
   unaffected.
 
+## Vypr (latest-vypr image)
+
+`recipes/recipe-vypr.yml` publishes `ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr`
+(Vypr shows each Windows-VM application as a native window, over shared memory,
+with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
+`:latest` image stays without it. Contract and gotchas:
+
+- **Pin**: host binaries are built in the `vypr` build stage from the v0.5.0
+  source tarball (`files/scripts/vypr-build.sh`, sha256-pinned) and copied to
+  `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
+  ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
+  together — host and guest protocol versions must match.
+- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`):
+  picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
+  USB tablet, topoext, emulated sound card, optional virtiofs share), checks
+  qemu.conf/libvirt group/default network/IOMMU kargs and offers the root steps
+  via sudo after confirmation, creates `~/.ssh/vypr-guest` and
+  `~/.config/vypr/config`. It is idempotent and **never rewrites** an existing
+  config (only appends missing keys). `ujust vypr-guest-exe` copies the
+  installer to `~/Downloads` and prints the public key; `ujust vypr-doctor`
+  runs Vypr's own health check.
+- **Atomic updates**: `~/.config/vypr/**`, `~/.ssh/vypr-guest*`, registered
+  `.desktop`/icons are in `$HOME`; domain XML is in `/etc/libvirt/qemu/`;
+  qemu.conf, `/etc/libvirt/hooks/qemu`, `/etc/modprobe.d/` and
+  `rpm-ostree kargs` are `/etc`/deployment state. None of it is image-managed,
+  so upgrades never clobber it. Only `/usr/bin/vypr*` and `/usr/share/vypr/`
+  follow the image. `hyprtomic-vypr-setup` leaves a
+  `/etc/libvirt/qemu.conf.hyprtomic-vypr.bak` before editing.
+- **PCIe passthrough**: IOMMU args are suggested as
+  `rpm-ostree kargs --append-if-missing=...` (revert with `--delete`);
+  boot-time vfio binding lives in `/etc/modprobe.d/vfio.conf`; the dynamic GPU
+  swap uses libvirt's single `/etc/libvirt/hooks/qemu` file (`ujust
+  vypr-gpu-swap` prints upstream's steps; do not turn it into a qemu.d/
+  directory, libvirt never calls those).
+- **Launcher**: `vypr add`/`detect` write
+  `~/.local/share/applications/vypr-<app>.desktop` with `Exec=/usr/bin/vypr
+  run <app>` and icons in `~/.local/share/icons/hicolor/...`; the shared
+  `$HOME` makes the quickshell launcher list them under the GUI-container
+  source chip. `files/gui/usr/bin/vypr` is a shim that forwards the whole
+  command to the host with `distrobox-host-exec`, so the absolute Exec resolves
+  inside the container; on the host the same path is the real launcher.
+- **Hyprland**: Vypr windows are ordinary xdg_toplevels whose class/app_id is
+  `vypr-<app>` (matching the desktop entry for icon/name). The skel
+  `float-vypr` window rule floats them, centers them, sets
+  `idle_inhibit = "focus"` (windowed games must not let the screen blank) and
+  `no_blur`; the guest owns the window size and Vypr negotiates resizes, so
+  tiling would fight it. Users override in `local.conf` if they want.
+- **Windows side** (`vypr-setup.exe`): grants "Lock pages in memory", enables
+  auto-login (a locked screen has nothing to capture), installs an SSH server
+  with the host key, optionally Parsec's mouse driver and WinFsp; with
+  `OPEN_ELEVATION=1` (default) it turns the UAC prompt off, which is a real
+  security reduction for the VM — `vypr open-elevation --remove` undoes it.
+- The GUI image carries the shim for **all** host variants; it fails cleanly
+  ("vypr: not configured"/command not found) if the host is the base image.
+
 ## Build + CI rules
 
 - **Only `main` publishes images.** Feature branches are validated by opening a
   PR (or `workflow_dispatch`). Pushing to a feature branch does not build.
 - Do not push commits to a branch you do not own; create a new branch and open a
   PR instead. New branches are safe to push (no workflow triggers on push).
-- `build.yml` ignores `files/scripts/gui-*`; `gui.yml` only watches
-  `recipes/gui.yml`, `files/gui/**`, `files/gui-build/**`. If you move files
-  between those trees, update the path filters.
-- **PRs always report both checks.** Both workflows trigger on every pull
+- `build.yml` ignores `files/scripts/gui-*` and `files/scripts/vypr-*`;
+  `vypr.yml` builds `recipe-vypr.yml` and watches the two common recipe files,
+  `files/system/**`, `files/vypr/**` and `files/scripts/**`; `gui.yml` only
+  watches `recipes/gui.yml`, `files/gui/**`, `files/gui-build/**`. If you move
+  files between those trees, update the path filters.
+- **PRs always report all checks.** All three workflows trigger on every pull
   request (no `pull_request.paths`), and a `dorny/paths-filter` step mirrors
   the push `paths:` lists to gate only the BlueBuild step: one-sided PRs still
-  report `bluebuild` / `bluebuild-gui` as green with the expensive build
-  skipped (`build.yml` is required by the `main protect` ruleset; a
-  workflow-level paths filter used to leave it "Expected" and block merges).
-  Keep the PR filter lists in sync with the push `paths:` lists; push/schedule/
-  dispatch keep the workflow-level filters and always build.
+  report `bluebuild` / `bluebuild-vypr` / `bluebuild-gui` as green with the
+  expensive build skipped (`build.yml` is required by the `main protect`
+  ruleset; a workflow-level paths filter used to leave it "Expected" and block
+  merges). Keep the PR filter lists in sync with the push `paths:` lists;
+  push/schedule/dispatch keep the workflow-level filters and always build.
 - GUI layer caching is deliberate: `gui-02-quickshell.sh` (the expensive
   quickshell compile) runs first and every other package layer `COPY`s only its
   own script. Do not turn these into a single layer or `COPY files/` wholesale.
@@ -264,6 +331,11 @@ End-to-end: on a test machine, update the host image, reboot, run
 
 - Host + GUI container pipelines, session plumbing, skel sync, SDDM theme,
   firstboot services and the ujust recipes are in place.
+- Vypr ships as a second host tag (`latest-vypr`, see "Vypr" above): the
+  host binaries + `vypr-setup.exe` are built/downloaded at image build time,
+  `ujust vypr-setup` configures the VM and the guest setup at any time, and
+  the GUI container's `/usr/bin/vypr` shim makes the registered apps work
+  from the launcher. The `:latest` image is unchanged and has none of it.
 - The hostname is not assigned at first boot: the installer's name (os-release
   `DEFAULT_HOSTNAME` is only a default) or `hostnamectl set-hostname` is used
   and persists in `/etc` across image updates (README "ホスト名").

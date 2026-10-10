@@ -11,12 +11,12 @@ on:
       - "files/gui/**"
       - "files/gui-build/**"
       - ".github/workflows/gui.yml"
+  # Pull requests always trigger this workflow (no paths filter) so the
+  # `bluebuild-gui` check is reported even when only host-side files changed
+  # (mirror of build.yml). The expensive GUI build stays skipped for such PRs:
+  # the build step below is conditional, the job itself stays green.
   pull_request:
-    paths:
-      - "recipes/gui.yml"
-      - "files/gui/**"
-      - "files/gui-build/**"
-      - ".github/workflows/gui.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -28,8 +28,24 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      pull-requests: read # dorny/paths-filter fetches the PR file list via the API
     steps:
+      # PR change detection: mirror of the push paths filter above. On
+      # push/schedule/dispatch the workflow is already path-filtered, so the
+      # build always runs and this step is skipped.
+      - name: Detect GUI-image changes (PR only)
+        id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            build:
+              - "recipes/gui.yml"
+              - "files/gui/**"
+              - "files/gui-build/**"
+              - ".github/workflows/gui.yml"
       - name: Build GUI container
+        if: github.event_name != 'pull_request' || steps.changes.outputs.build == 'true'
         uses: blue-build/github-action@v1.11
         with:
           recipe: gui.yml

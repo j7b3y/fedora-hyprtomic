@@ -198,6 +198,14 @@ Where the theme is consumed:
 - `build.yml` ignores `files/scripts/gui-*`; `gui.yml` only watches
   `recipes/gui.yml`, `files/gui/**`, `files/gui-build/**`. If you move files
   between those trees, update the path filters.
+- **PRs always report both checks.** Both workflows trigger on every pull
+  request (no `pull_request.paths`), and a `dorny/paths-filter` step mirrors
+  the push `paths:` lists to gate only the BlueBuild step: one-sided PRs still
+  report `bluebuild` / `bluebuild-gui` as green with the expensive build
+  skipped (`build.yml` is required by the `main protect` ruleset; a
+  workflow-level paths filter used to leave it "Expected" and block merges).
+  Keep the PR filter lists in sync with the push `paths:` lists; push/schedule/
+  dispatch keep the workflow-level filters and always build.
 - GUI layer caching is deliberate: `gui-02-quickshell.sh` (the expensive
   quickshell compile) runs first and every other package layer `COPY`s only its
   own script. Do not turn these into a single layer or `COPY files/` wholesale.

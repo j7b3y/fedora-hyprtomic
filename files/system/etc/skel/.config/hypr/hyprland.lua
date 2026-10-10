@@ -88,10 +88,12 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets,pkcs11,ssh")
     -- XDG autostart: the Background portal writes a flatpak app's "start on
     -- login" entry to ~/.config/autostart; dex runs those entries (there is no
-    -- gnome-session here). Only the user directory is scanned on purpose:
+    -- gnome-session here). Fedora ships the tool as dex-autostart (there is no
+    -- /usr/bin/dex). Only the user directory is scanned on purpose:
     -- /etc/xdg/autostart holds GNOME/XFCE applets (blueman, nm-applet,
-    -- geoclue-demo-agent, ...) that do not belong in this session.
-    hl.exec_cmd('dex -a -e Hyprland -s "$HOME/.config/autostart"')
+    -- geoclue-demo-agent, ...) that do not belong in this session; the GUI
+    -- container's own entries run inside it (hyprtomic-container-autostart).
+    hl.exec_cmd('dex-autostart -a -e Hyprland -s "$HOME/.config/autostart"')
     hl.exec_cmd("swaybg -i $HOME/.local/share/backgrounds/wallpaper.jpg -m fill")
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 36")
     -- GUI shell (quickshell) in the Arch container. Manages the container via

@@ -112,7 +112,7 @@ Add a dotfile set under `files/system/etc/skel/`. The base assumes:
 | Video player | Haruna runs in the GUI container (Qt/QML + libmpv; its Kirigami colors come from the generated `~/.config/kdeglobals`, widget dialogs from qt6ct/Kvantum; MPRIS for `playerctl`/media keys). `files/system/etc/skel/.local/share/applications/org.kde.haruna.desktop` overrides the container's own entry in the shared `$HOME`, so the host's nemo/`xdg-open` find it; `Exec=haruna` resolves on both sides through the shim `hyprtomic-gui-shell` exports to `~/.local/bin`. `register_haruna_mimes()` (same script) makes it the default handler **only** for MIME types that have none, so a user's own choice wins. |
 | GTK / Qt theming | Driven by `~/.config/quickshell/ii/scripts/apply-theme.sh` (see "Theming"): GTK3/4 gtk.css, qt5ct/qt6ct palettes + a recolored Kvantum theme, ghostty palette, rofi colors and Hyprland borders. Adwaita base + Bibata-Modern-Classic cursor (baked into the dconf db). Icons: Papirus-Dark on the host, Tela-circle-dark in the GUI container (see "Where the theme is consumed"). |
 | Python deps | The shell venv is built from `files/gui/usr/share/hyprtomic/uv-requirements.txt` (installed into the container at `/usr/share/hyprtomic/`, currently empty; `resolve-icons.py` needs only the container's python-gobject + gtk3). |
-| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. Startup / run-in-background permissions: `xdg-desktop-portal-gnome` provides `org.freedesktop.portal.Background` (the Hyprland and GTK backends do not; `files/system/etc/xdg/xdg-desktop-portal/portals.conf` routes only Background to it), `hyprtomic-gui-shell` seeds the empty `background/background` permission-store row so Flatseal's Background toggle is usable, and `dex -a` (autostart in `hyprland.lua`) runs `~/.config/autostart` entries at login. Discord Rich Presence: the same session script points `$XDG_RUNTIME_DIR/discord-ipc-0` at the installed flatpak client (Vesktop) and adds the matching global flatpak overrides. |
+| Flatpaks | Host-managed (system scope). `hyprtomic-gui-shell` bind-mounts `/var/lib/flatpak` read-only into the container and sets `XDG_DATA_DIRS`; the shell launches flatpaks via `distrobox-host-exec flatpak run <app-id>`. Startup / run-in-background permissions: `xdg-desktop-portal-gnome` provides `org.freedesktop.portal.Background` (the Hyprland and GTK backends do not; `files/system/etc/xdg/xdg-desktop-portal/portals.conf` routes only Background to it), `hyprtomic-gui-shell` seeds the empty `background/background` permission-store row so Flatseal's Background toggle is usable, and `dex-autostart` (autostart in `hyprland.lua`) runs host-owned `~/.config/autostart` entries at login. Entries owned by the GUI container (its own `/etc/xdg/autostart` plus user entries whose command exists only inside it) are run inside the container by `hyprtomic-container-autostart`, which `hyprtomic-gui-session` starts; the fcitx5 entry is excluded there because the session starts fcitx5 manually. Discord Rich Presence: the same session script points `$XDG_RUNTIME_DIR/discord-ipc-0` at the installed flatpak client (Vesktop) and adds the matching global flatpak overrides. |
 | Bitwarden | The flatpak's "Unlock with system authentication" (`https://bitwarden.com/help/biometrics/`) checks the polkit action `com.bitwarden.Bitwarden.unlock`; a sandboxed install cannot set the policy up itself (the app only shows "Automatic setup not available" and links to the docs), so the image ships `files/system/usr/share/polkit-1/actions/com.bitwarden.Bitwarden.policy` with that action id. Keep it in sync with upstream `apps/desktop/resources/com.bitwarden.desktop.policy`; the authentication prompt comes from `hyprpolkitagent` (started by `hyprland.lua`). |
 | Licenses | Anything vendored into `/etc/skel` must ship its license under `files/system/usr/share/licenses/` and be listed in `THIRD-PARTY-NOTICES.md`. |
 
@@ -297,10 +297,15 @@ End-to-end: on a test machine, update the host image, reboot, run
 - Flatpak startup/background permissions work end to end: the Background portal
   (`xdg-desktop-portal-gnome`, routed via
   `/etc/xdg/xdg-desktop-portal/portals.conf`) serves app requests and Flatseal's
-  per-app Background toggle, and `dex -a` runs `~/.config/autostart` entries at
-  login. The GNOME backend's app-state monitor needs gnome-shell, so
-  background-app monitoring (kill/notify) stays inactive under Hyprland; the
-  permission grant, the autostart file and Flatseal are unaffected.
+  per-app Background toggle; the host's `dex-autostart` runs host-owned
+  `~/.config/autostart` entries at login, while entries owned by the GUI
+  container (the GUI image's `/etc/xdg/autostart` and user entries whose command
+  exists only inside the container) are run inside it by
+  `hyprtomic-container-autostart` (fcitx5 stays manually started by
+  `hyprtomic-gui-session`). The GNOME backend's app-state monitor needs
+  gnome-shell, so background-app monitoring (kill/notify) stays inactive under
+  Hyprland; the permission grant, the autostart file and Flatseal are
+  unaffected.
 - Discord Rich Presence works with flatpak clients (Vesktop): `hyprtomic-gui-shell`
   points `$XDG_RUNTIME_DIR/discord-ipc-0` at the client's sandbox socket and adds
   the matching global flatpak override, so games and apps can set presence. Only

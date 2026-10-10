@@ -23,4 +23,12 @@ command -v clipse >/dev/null 2>&1 && clipse -listen >/dev/null 2>&1 &
 wl-paste --type text  --watch bash -c "cliphist store && qs -c '$QS_CONFIG' ipc call cliphistService update" &
 wl-paste --type image --watch bash -c "cliphist store && qs -c '$QS_CONFIG' ipc call cliphistService update" &
 
+# XDG autostart for the container: the host's dex-autostart only runs entries
+# whose command exists on the host (flatpaks, host tools); this pass runs the
+# container's own entries and the user entries whose command lives only here.
+# Backgrounded so probing the host can never delay the shell; fcitx5 is
+# excluded inside (it is started manually above). Output goes to
+# gui-session.log like the rest of this session.
+hyprtomic-container-autostart &
+
 exec qs -c "$QS_CONFIG"

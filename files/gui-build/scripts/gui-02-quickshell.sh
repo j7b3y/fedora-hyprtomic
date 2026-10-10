@@ -26,6 +26,23 @@ sudo -u builder bash -lc '
   yay -Y --gendb || true
 '
 
-sudo -u builder bash -lc 'yay -S --noconfirm --needed \
-  --answerclean None --answeredit None --answerupgrade None \
-  quickshell-git'
+# quickshell-git with local fix patches applied. The AUR package compiles
+# upstream git master; fetch its recipe, add a prepare() that applies
+# files/gui-build/patches/ (gui-02-quickshell-apply-patches.sh) and build with
+# makepkg. The apply helper fuzzes the patches and skips any that upstream has
+# already fixed, so upstream changes only break the build when they refactor
+# the affected code without fixing the crash (then it fails loudly instead of
+# silently shipping an unpatched shell).
+sudo -u builder bash -lc '
+  set -e
+  cd /tmp
+  rm -rf quickshell-git
+  git clone --depth 1 https://aur.archlinux.org/quickshell-git.git
+  cd quickshell-git
+  if grep -qE "^[[:space:]]*prepare[[:space:]]*\(\)" PKGBUILD; then
+    echo "quickshell-git PKGBUILD gained a prepare(); update gui-02-quickshell.sh" >&2
+    exit 1
+  fi
+  printf "\nprepare() {\n  cd \"\$srcdir/\$_pkgname\"\n  bash /tmp/gui-02-quickshell-apply-patches.sh\n}\n" >>PKGBUILD
+  makepkg -si --noconfirm
+'

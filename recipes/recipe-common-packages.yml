@@ -1,0 +1,122 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/module-list-v1.json
+# Shared host-image package layer (used by recipe.yml and recipe-vypr.yml).
+# This is the slow-but-stable layer: keep it first so dotfile edits in
+# recipe-common-dotfiles.yml do not invalidate it.
+modules:
+  # Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
+  - type: os-release
+    properties:
+      NAME: "HyprTomic"
+      PRETTY_NAME: "HyprTomic (powered by Fedora Atomic)"
+      VARIANT: "HyprTomic"
+      VARIANT_ID: "hyprtomic"
+      HOME_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      DOCUMENTATION_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      SUPPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      DEFAULT_HOSTNAME: "hyprtomic"
+
+  # System-layer packages (Fedora official + one COPR for the Bibata cursor
+  # theme, which the compositor loads and Fedora does not ship; the GUI
+  # shell itself lives in the Arch container)
+  - type: dnf
+    repos:
+      cleanup: true
+      files:
+        - ririko66z-dots-hyprland.repo # bibata-cursor-theme
+    install:
+      skip-unavailable: true
+      packages:
+        # Session: hyprland/hyprlock/hypridle/portals/sddm come from wayblue base.
+        # The GUI shell is NOT installed here: it lives in the Arch GUI container
+        # (ghcr.io/j7b3y/hyprtomic-gui).
+        # Background portal (flatpak "run in background" / autostart
+        # permissions): neither the Hyprland nor the GTK portal backend
+        # implements org.freedesktop.portal.Background, so apps could not ask
+        # for those permissions and Flatseal's Background toggle stayed greyed
+        # out. The GNOME backend provides the interface; the portals.conf in
+        # files/system/etc/xdg/xdg-desktop-portal/ routes only Background to
+        # it. Its compositor-state queries need gnome-shell and stay inactive
+        # under Hyprland, which only disables background-app monitoring.
+        - xdg-desktop-portal-gnome
+        # SDDM astronaut theme deps
+        - qt6-qtsvg
+        - qt6-qtvirtualkeyboard
+        - qt6-qtmultimedia
+        - qt6-qt5compat
+        # Audio
+        - pipewire
+        - pipewire-pulseaudio
+        - wireplumber
+        - pavucontrol
+        # Network
+        - NetworkManager
+        # Bluetooth (managed by the GUI shell)
+        - bluez
+        # Auth: polkit comes from the wayblue base, but the Hyprland session
+        # polkit agent does not, so install it explicitly; hyprland.lua starts
+        # it via `systemctl --user start hyprpolkitagent`.
+        - hyprpolkitagent
+        - gnome-keyring
+        # Fingerprint login: fprintd daemon + pam_fprintd (and the enrollment
+        # CLI). The SDDM PAM stack (/etc/pam.d/sddm) only runs pam_fprintd
+        # when the password field was submitted empty; enroll fingers with
+        # `fprintd-enroll` in a host terminal.
+        - fprintd
+        - fprintd-pam
+        # Qt wayland backend
+        - qt5-qtwayland
+        # Qt theming on the host: qt6ct (platform theme) + Kvantum (widget
+        # style) so host Qt apps use the same palette as the GUI container.
+        # QT_QPA_PLATFORMTHEME=qt6ct is set by hyprland.lua.
+        - qt6ct
+        - kvantum
+        # Fonts (base set; decoration fonts + IME live in the GUI container)
+        - google-noto-sans-cjk-fonts
+        - google-noto-color-emoji-fonts
+        - twitter-twemoji-fonts
+        # Icon theme (host GTK apps: nemo etc.; the GUI container ships its own)
+        - papirus-icon-theme
+        # Cursor theme (loaded by the compositor, so it must be on the host)
+        - bibata-cursor-theme
+        # Bar / notifications: provided by the GUI shell in the container
+        # (waybar/dunst are not used). swaybg sets the desktop wallpaper
+        # (hyprland.lua autostart) since the shell has no background module.
+        - swaybg
+        # Screenshot / clipboard
+        - grim
+        - slurp
+        - wl-clipboard
+        - cliphist
+        # Utilities
+        - brightnessctl
+        - playerctl
+        - libnotify
+        - dex-autostart
+        - distrobox # GUI container runtime (hyprtomic-gui-shell / ujust gui-container-*)
+        - python3-gobject
+        - fastfetch
+        - zstd # base carries it transitively; pin it so zstd/unzstd stay available
+        # File manager (Fedora official; promoted from user-later to system standard)
+        - nemo
+        - nemo-extensions
+        - file-roller
+        - ffmpegthumbnailer
+        - tumbler
+        # IME: managed inside the GUI container (fcitx5 + engine there), so the
+        # input method is available to the container's GUI apps.
+        # Input/automation helpers used by the shell and tools
+        - wtype
+        - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)
+        - python3-cairo
+        # Common dev tools (used across all dev envs)
+        - git
+        - git-credential-oauth
+        - python3-pip
+        - android-tools
+        - nvim
+        - python3-neovim
+        - zsh
+        - zsh-autosuggestions
+        - zsh-syntax-highlighting

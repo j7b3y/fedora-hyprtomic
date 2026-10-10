@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# XDG autostart for the GUI container: run the entries that belong to it.
+#
+# The session runs on the host, where hyprland.lua calls dex-autostart on
+# ~/.config/autostart. That pass can only launch entries whose command exists
+# on the host, and it never looks at the container's own /etc/xdg/autostart.
+# This helper collects those entries into a private directory of symlinks and
+# runs them through the container's dex (which implements Hidden/OnlyShowIn/
+# NotShowIn/TryExec/Path/field codes for us).
+#
+# Ownership heuristic (runs inside the GUI container):
+#   - Exec is flatpak or resolves on the host -> host dex owns it; skip.
+#   - Exec resolves only in the container     -> container owns it; run.
+#   - Neither                                 -> skip (a failure here would only
+#     add log noise; the host dex tolerates the same failures).
+#   A command that exists on both sides intentionally runs on the host: the
+#   host is the session owner and its copy is the canonical one. Exec= is
+#   parsed heuristically (env/VAR=value prefixes, quotes and %-field codes are
+#   handled; shell wrappers like `sh -c` are not), so an exotic entry can end
+#   up on the wrong side or be skipped, but it never runs twice.
+#
+# Limitations:
+#   - Only this already-running container is served. Autostart entries that
+#     belong to another distrobox (or would need a stopped one to be started)
+#     are not launched at login; they run when that container's own session
+#     starts.
+#   - fcitx5 is started manually by hyprtomic-gui-session so it must not be
+#     started a second time here; any fcitx5 entry is excluded below.
+#
+# Best effort: always exits 0. hyprtomic-gui-session runs this in the
+# background, so a slow host probe can never delay quickshell startup; the
+# single summary line lands in ~/.local/state/hyprtomic/gui-session.log.
+
+set -uo pipefail
+
+user_dir="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+# HYPRTOMIC_AUTOSTART_SYSTEM_DIR lets tests substitute a temp dir for
+# /etc/xdg/autostart.
+system_dir="${HYPRTOMIC_AUTOSTART_SYSTEM_DIR:-/etc/xdg/autostart}"
+
+# The container's dex is what actually understands the desktop entry rules;
+# without it there is nothing to do, and a broken image must not spam the log.
+command -v dex >/dev/null 2>&1 || exit 0
+
+# Exec= value of the [Desktop Entry] group (first match), CR stripped. Only the
+# command word is extracted below, so the whole value needs no full parse.
+entry_exec() {
+    sed -e 's/\r$//' -- "$1" 2>/dev/null | awk -F'=' '
+        /^\[/ { in_group = ($0 == "[Desktop Entry]"); next }
+        in_group && $1 == "Exec" { sub(/^[^=]*=/, ""); print; exit }
+    '
+}
+
+# First command word of an Exec value: drops `env` and VAR=value prefixes,
+# unwraps simple quotes and removes %-field codes. Prints nothing (and
+# succeeds) when there is no word.
+exec_word() {
+    local s="$1" first name
+    s="${s#"${s%%[![:space:]]*}"}" # leading whitespace
+    while :; do
+        first="${s%%[[:space:]]*}"
+        case "${first##*/}" in
+            env)
+                s="${s#"$first"}"
+                s="${s#"${s%%[![:space:]]*}"}"
+                continue
+                ;;
+        esac
+        [[ "$first" == *=* ]] || break
+        name="${first%%=*}"
+        [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || break
+        s="${s#"$first"}"
+        s="${s#"${s%%[![:space:]]*}"}"
+    done
+    case "$s" in
+        \"*) s="${s#\"}"; s="${s%%\"*}";;
+        \'*) s="${s#\'}"; s="${s%%\'*}";;
+        *)   s="${s%%[[:space:]]*}";;
+    esac
+    s="${s//%[a-zA-Z]/}"
+    printf '%s\n' "$s"
+}
+
+entry_cmd() {
+    local e
+    e="$(entry_exec "$1")"
+    [ -n "$e" ] || return 0
+    exec_word "$e"
+}
+
+# Private search dir for dex: symlinks only, recreated every session.
+# $XDG_RUNTIME_DIR is writable inside the container (distrobox bind-mounts it
+# from the host); /tmp covers odd setups. The host never scans this path.
+private_dir="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/hyprtomic/autostart"
+rm -rf -- "$private_dir"
+mkdir -p -- "$private_dir"
+
+# ---- user entries (shared ~/.config/autostart) ---------------------------
+
+# Qualifying user entries win over same-named system entries (dex semantics:
+# the first search dir wins; here a single dir means the system file must not
+# be linked when the user has an entry of the same name, even a host-owned one
+# - it may be a Hidden=true override).
+declare -A user_names=() candidate_seen=() host_has=()
+candidates=()
+for f in "$user_dir"/*.desktop; do
+    [ -f "$f" ] || continue
+    user_names["${f##*/}"]=1
+    cmd="$(entry_cmd "$f")"
+    [ -n "$cmd" ] || continue
+    [ "${cmd##*/}" = fcitx5 ] && continue # manual start, no second instance
+    [ "${cmd##*/}" = flatpak ] && continue # flatpaks are host-managed
+    [ -n "${candidate_seen[$cmd]:-}" ] && continue
+    candidate_seen["$cmd"]=1
+    candidates+=("$cmd")
+done
+
+# One batched host probe; a distrobox-host-exec call per entry would be slow.
+# `exit 0` keeps a last-iteration miss from looking like a probe failure.
+probe_ok=0
+if [ "${#candidates[@]}" -eq 0 ]; then
+    probe_ok=1
+elif command -v distrobox-host-exec >/dev/null 2>&1; then
+    probe_out=""
+    if probe_out="$(timeout 15 distrobox-host-exec sh -lc '
+        for b in "$@"; do command -v "$b" >/dev/null 2>&1 && printf "%s\n" "$b"; done
+        exit 0
+    ' hyprtomic-container-autostart "${candidates[@]}" 2>/dev/null)"; then
+        probe_ok=1
+    fi
+    while IFS= read -r bin; do
+        [ -n "$bin" ] && host_has["$bin"]=1
+    done <<<"$probe_out"
+fi
+
+linked=0
+skipped_host=0
+for f in "$user_dir"/*.desktop; do
+    [ -f "$f" ] || continue
+    cmd="$(entry_cmd "$f")"
+    [ -n "$cmd" ] || continue
+    [ "${cmd##*/}" = fcitx5 ] && continue
+    [ "${cmd##*/}" = flatpak ] && { skipped_host=$((skipped_host + 1)); continue; }
+    # No host answer (probe unavailable): keep the entry with the host, the
+    # safe side - starting a host-owned app twice is worse than not at all.
+    if [ "$probe_ok" -eq 0 ] || [ -n "${host_has[$cmd]:-}" ]; then
+        skipped_host=$((skipped_host + 1))
+        continue
+    fi
+    command -v -- "$cmd" >/dev/null 2>&1 || continue
+    case "$f" in
+        /*) link_target="$f" ;;
+        *) link_target="$PWD/$f" ;;
+    esac
+    ln -s -f -- "$link_target" "$private_dir/${f##*/}"
+    linked=$((linked + 1))
+done
+
+# ---- container-shipped entries (/etc/xdg/autostart) ----------------------
+
+system_linked=0
+for f in "$system_dir"/*.desktop; do
+    [ -f "$f" ] || continue
+    name="${f##*/}"
+    [ -n "${user_names[$name]:-}" ] && continue # user entry takes precedence
+    cmd="$(entry_cmd "$f")"
+    [ "${cmd##*/}" = fcitx5 ] && continue # manual start, no duplicate instance
+    case "$f" in
+        /*) link_target="$f" ;;
+        *) link_target="$PWD/$f" ;;
+    esac
+    ln -s -f -- "$link_target" "$private_dir/$name"
+    system_linked=$((system_linked + 1))
+done
+
+total=$((linked + system_linked))
+if [ "$total" -gt 0 ]; then
+    dex -a -e Hyprland -s "$private_dir" || true
+fi
+
+if [ "$probe_ok" -eq 0 ]; then
+    printf 'hyprtomic-container-autostart: %d container-owned entries to dex; host probe unavailable, %d user entries skipped\n' \
+        "$total" "$skipped_host" >&2
+else
+    printf 'hyprtomic-container-autostart: %d container-owned entries to dex; %d user entries owned by the host\n' \
+        "$total" "$skipped_host" >&2
+fi

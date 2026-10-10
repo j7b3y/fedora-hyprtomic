@@ -40,9 +40,10 @@ fix-flatpak-fonts:
 
 # Re-register the .desktop files of the other distrobox containers with the
 # host application dirs, so the quickshell launcher lists them (the launcher
-# groups them by container). Also runs as the hyprtomic-distrobox-apps.service
-# user unit, which follows containers that start after login; use this to force
-# a pass.
+# groups them by container). Removes entries whose source app or container
+# disappeared and refreshes the mirrored icons. Also runs as the
+# hyprtomic-distrobox-apps.service user unit, which follows containers that
+# start after login; use this to force a pass.
 refresh-distrobox-apps:
     @/usr/bin/hyprtomic-distrobox-apps
 

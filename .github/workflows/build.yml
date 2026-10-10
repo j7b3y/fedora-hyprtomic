@@ -14,15 +14,14 @@ on:
       - "!files/scripts/gui-*" # GUI-only scripts build in gui.yml
       - "!**/*.md"
       - ".github/workflows/build.yml"
+  # Pull requests always trigger this workflow (no paths filter) so the
+  # required `bluebuild` status check is reported on every PR: with a
+  # workflow-level paths filter, a GUI-only PR left `bluebuild` "Expected" and
+  # unusable to merge even though `bluebuild-gui` succeeded. The expensive
+  # build is still skipped for such PRs -- the build step below is conditional,
+  # the job itself stays green.
   pull_request:
-    paths:
-      - "recipes/recipe.yml"
-      - "files/system/**"
-      - "files/scripts/**"
-      - "files/dnf/**"
-      - "!files/scripts/gui-*"
-      - "!**/*.md"
-      - ".github/workflows/build.yml"
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch: # allow manually triggering builds
 concurrency:
   # only run one build at a time
@@ -35,12 +34,31 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      pull-requests: read # dorny/paths-filter fetches the PR file list via the API
     steps:
+      # PR change detection: mirror of the push paths filter above. On
+      # push/schedule/dispatch the workflow is already path-filtered, so the
+      # build always runs and this step is skipped.
+      - name: Detect host-image changes (PR only)
+        id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            build:
+              - "recipes/recipe.yml"
+              - "files/system/**"
+              - "files/scripts/**"
+              - "files/dnf/**"
+              - "!files/scripts/gui-*"
+              - "!**/*.md"
+              - ".github/workflows/build.yml"
       # The build is fully handled by the reusable github action.
       # On pull_request it builds a PR-scoped image (does not touch :latest).
       # On push to main / schedule it publishes + signs :latest.
       # Job id is 'bluebuild' (no matrix) => required status check name = "bluebuild".
       - name: Build Custom Image
+        if: github.event_name != 'pull_request' || steps.changes.outputs.build == 'true'
         uses: blue-build/github-action@v1.11
         with:
           recipe: recipe.yml

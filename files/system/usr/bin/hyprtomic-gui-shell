@@ -88,17 +88,41 @@ init_container() {
 
     # Expose container-side GUI tools on the host PATH (shims that re-enter the
     # container) so Hyprland keybinds/scripts can call them transparently.
-    # `haruna` is here for the desktop entry in skel (Exec=haruna), which is
-    # what lets host nemo / xdg-open open videos with the container's player.
     # ghostty is NOT exported: the host has its own ghostty (install-ghostty.sh
     # via the scottames/ghostty COPR), and a container shim here would shadow it
     # on PATH and turn Super+Q into an Arch-container shell.
-    distrobox enter "$CONTAINER" -- bash -lc '
-        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
-                   rofi clipse-gui clipse nwg-displays haruna; do
+    #
+    # The same pass prunes old exports of this container that are no longer in
+    # the list (e.g. a tool dropped from it): a shim is removed only when it
+    # carries distrobox's `# distrobox_binary` marker, names this container
+    # (`# name:` line or the `-n <container>` argument) and is not exported
+    # below. Hand-written files such as sunshine-wrap.sh never match.
+    distrobox enter "$CONTAINER" -- \
+        env HYPRTOMIC_EXPORT_CONTAINER="$CONTAINER" bash -lc '
+        # haruna is exported for the skel desktop entry (Exec=haruna), which
+        # lets host nemo / xdg-open open videos with the container player.
+        # register_haruna_mimes (run on the host) points the MIME handlers at
+        # it.
+        export_bins="hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
+                     rofi clipse-gui clipse nwg-displays haruna"
+        for bin in $export_bins; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
+        done
+        container="${HYPRTOMIC_EXPORT_CONTAINER:-${CONTAINER_ID:-}}"
+        for shim in "$HOME/.local/bin"/*; do
+            [ -f "$shim" ] || continue
+            grep -q "^# distrobox_binary$" "$shim" 2>/dev/null || continue
+            if ! grep -q "^# name: ${container}$" "$shim" 2>/dev/null &&
+               ! grep -qF " -n ${container} " "$shim" 2>/dev/null; then
+                continue
+            fi
+            name="$(basename "$shim")"
+            case " $export_bins " in
+                *" $name "*) continue ;;
+            esac
+            rm -f "$shim"
         done
     '
 

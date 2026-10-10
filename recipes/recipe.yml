@@ -104,6 +104,7 @@ modules:
         - distrobox # GUI container runtime (hyprtomic-gui-shell / ujust gui-container-*)
         - python3-gobject
         - fastfetch
+        - zstd # base carries it transitively; pin it so zstd/unzstd stay available
         # File manager (Fedora official; promoted from user-later to system standard)
         - nemo
         - nemo-extensions

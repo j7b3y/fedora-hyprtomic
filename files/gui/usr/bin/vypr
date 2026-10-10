@@ -1,0 +1,8 @@
+#!/bin/sh
+# Vypr runs on the HyprTomic host: vyprd reads frames straight out of the VM's
+# RAM through libvirt and vypr-window opens the Wayland window there. `vypr
+# add`/`vypr detect` write desktop entries whose Exec is the absolute
+# /usr/bin/vypr, and the quickshell launcher runs those inside this container,
+# so the same path exists here and forwards the whole command to the host.
+# (Launched from the host, /usr/bin/vypr is the real launcher instead.)
+exec distrobox-host-exec /usr/bin/vypr "$@"

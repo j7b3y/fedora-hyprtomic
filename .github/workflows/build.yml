@@ -8,10 +8,13 @@ on:
       - main # only main publishes; feature branches are validated via PR
     paths:
       - "recipes/recipe.yml"
+      - "recipes/recipe-common-packages.yml"
+      - "recipes/recipe-common-dotfiles.yml"
       - "files/system/**"
       - "files/scripts/**"
-      - "files/dnf/**"
       - "!files/scripts/gui-*" # GUI-only scripts build in gui.yml
+      - "!files/scripts/vypr-*" # Vypr build scripts build in vypr.yml
+      - "files/dnf/**"
       - "!**/*.md"
       - ".github/workflows/build.yml"
   # Pull requests always trigger this workflow (no paths filter) so the
@@ -47,10 +50,13 @@ jobs:
           filters: |
             build:
               - "recipes/recipe.yml"
+              - "recipes/recipe-common-packages.yml"
+              - "recipes/recipe-common-dotfiles.yml"
               - "files/system/**"
               - "files/scripts/**"
-              - "files/dnf/**"
               - "!files/scripts/gui-*"
+              - "!files/scripts/vypr-*"
+              - "files/dnf/**"
               - "!**/*.md"
               - ".github/workflows/build.yml"
       # The build is fully handled by the reusable github action.

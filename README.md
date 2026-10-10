@@ -28,7 +28,7 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 ## できること
 
 - **シェル**（quickshell, 画面下）: 左のランチャーボタン、中央の 1〜10 ワークスペースページャ、右に `[トレイ][Wi-Fi/BT/バッテリー/音量][時計]`。
-- **ランチャー**: アプリ一覧の上に「コンテナ（hyprtomic-gui / Flatpak / 他の distrobox）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。コンテナ側は最初のソースが選択され（All は重複表示が多いため廃止、Host は ghostty のみなので廃止。ghostty は `Super+Q`）、他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します（`ujust refresh-distrobox-apps` で再登録）。
+- **ランチャー**: アプリ一覧の上に「コンテナ（hyprtomic-gui / Flatpak / 他の distrobox）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。コンテナ側は最初のソースが選択され（All は重複表示が多いため廃止、Host は ghostty のみなので廃止。ghostty は `Super+Q`）、他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します。登録はコンテナの起動や再ログインのたびに最新化され、消えたアプリ・コンテナの古い登録やアイコンは削除・更新されます（`ujust refresh-distrobox-apps` で即時実行）。
 - **コントロールセンター**: Wi-Fi / Bluetooth / 機内モード / テーマ切替 / 音量 / 輝度。
 - **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
 - **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。
@@ -134,7 +134,7 @@ ujust gui-container-update
 - `ujust sync-skel-config` は `/etc/skel` → `$HOME` へのコピーです。既定では既存ファイルをスキップします。
 - `overwrite=1` を付けると、イメージ管理下のファイルを置き換え、前回の同期で入れたのにイメージから消えたファイルを削除します。`~/.config/hypr/local.conf` や `~/.local` の個人データは消えません。
 - GUI コンテナをゼロから作り直す: `ujust gui-container-reset` / 状態確認: `ujust gui-container-status`。
-- その他: `ujust refresh-distrobox-apps`（他コンテナのアプリ再登録）、`ujust fix-flatpak-fonts`（Chromium 系 flatpak の日本語フォント修正）。
+- その他: `ujust refresh-distrobox-apps`（他コンテナのアプリ登録を最新化し、消えたアプリ・コンテナの登録を削除）、`ujust fix-flatpak-fonts`（Chromium 系 flatpak の日本語フォント修正）。
 
 ## 基本操作（キー）
 

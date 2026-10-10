@@ -9,9 +9,20 @@
 #   - hyprtomic-gui-shell runs a one-shot pass at session start (cheap
 #     fallback); `ujust refresh-distrobox-apps` triggers one manually.
 #
-# Icons: distrobox-export mirrors /usr/share icons into the host icon dir; this
-# script additionally mirrors per-user icons from the container home (Steam's
-# steam_icon_<appid>) and keeps Steam library cover art in
+# Every pass is convergent. For each running container it
+#   - re-exports the current entries (distrobox-export overwrites the file),
+#   - removes `<container>-*.desktop` entries whose source .desktop file
+#     disappeared or no longer passes the export filter,
+#   - refreshes the mirrored icons and copies absolute container-only Icon=
+#     files into the launcher's app-icons override dir,
+# and then drops marked exports and distrobox's own `<container>.desktop`
+# entries for containers that no longer exist, plus stale Steam cover art.
+# Stopped containers keep their exports; they converge when they run again.
+#
+# Icons: distrobox-export mirrors /usr/share icons into the host icon dir but
+# only on first copy; this script additionally mirrors per-user icons from the
+# container home (Steam's steam_icon_<appid>), refreshes named icons that are
+# already mirrored, and keeps Steam library cover art in
 # ~/.local/share/hyprtomic/app-icons/ when a game only ships a tiny clienticon.
 #
 # The GUI container only has distrobox-export/distrobox-host-exec (distrobox
@@ -25,6 +36,10 @@ set -uo pipefail
 
 CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+# resolve-icons.py hardcodes ~/.local/share/hyprtomic/app-icons (the launcher's
+# per-app icon override dir), so keep this path independent of XDG_DATA_HOME.
+APP_ICONS_DIR="$HOME/.local/share/hyprtomic/app-icons"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
 MARKER="X-HyprTomic-Container="
 # --watch: seconds between polls of the running-container list. `distrobox
 # list` is a cheap podman query, and the launcher picks new entries up live.
@@ -57,20 +72,56 @@ running_container_names() {
         }'
 }
 
-# Export every visible .desktop file of one container (runs inside it) and
-# mirror the icons that only exist inside that container.
+# Export every visible .desktop file of one container (runs inside it), mirror
+# the icons that only exist inside that container, and write the basenames of
+# the source files that passed the filters to the host-side manifest $2
+# (prune_container_exports uses it to remove entries whose source is gone).
+#
 # stdin is /dev/null on purpose: `distrobox enter` must not consume whatever
 # feeds the caller (in sync() it used to eat the loop's container list, so only
 # the first container was ever registered).
 export_container() {
-    local name="$1"
+    local name="$1" manifest="$2" manifest_in_container=""
+    [ -n "$manifest" ] && manifest_in_container="/run/host${manifest}"
     timeout 120 distrobox enter "$name" -- \
         env DISTROBOX_ENTER_PATH="distrobox-host-exec distrobox-enter" \
+        HYPRTOMIC_EXPORT_CONTAINER="$name" \
+        HYPRTOMIC_MANIFEST="$manifest_in_container" \
         sh -lc '
             # Host home as seen from this container.
             host_home="${DISTROBOX_HOST_HOME:-$HOME}"
             host_icons="/run/host${host_home}/.local/share/icons"
             host_app_icons="/run/host${host_home}/.local/share/hyprtomic/app-icons"
+            manifest="${HYPRTOMIC_MANIFEST:-}"
+            container="${HYPRTOMIC_EXPORT_CONTAINER:-${CONTAINER_ID:-}}"
+
+            # Same filter as the export loop below: only visible entries that
+            # do not already go through distrobox are export candidates.
+            # Match the distrobox commands, not the bare word: container homes
+            # live under ~/distrobox/<name>/, so a wine WINEPREFIX or an app
+            # installed into such a path must still be registered. Entries in
+            # the shared home that this container cannot run (apps of the host
+            # or of another container) are left to their owner, so one
+            # container never registers them under its own name; entries
+            # without Exec (e.g. Type=Link) keep the old behaviour.
+            desktop_file_ok() {
+                grep -q "^NoDisplay=true" "$1" 2>/dev/null && return 1
+                grep -q "^Hidden=true" "$1" 2>/dev/null && return 1
+                grep -qE "^Exec=(.*[[:space:]/])?distrobox(-(host-exec|enter|export))?([[:space:]]|\$)" "$1" 2>/dev/null && return 1
+                case "$1" in
+                    "$HOME"/.local/share/applications/*)
+                        if [ "$host_home" = "$HOME" ]; then
+                            exec_line="$(sed -n "s/^Exec=//p" "$1" | head -n 1)"
+                            if [ -n "$exec_line" ]; then
+                                bin="$(exec_binary "$exec_line")"
+                                [ -n "$bin" ] || return 1
+                                command -v "$bin" >/dev/null 2>&1 || return 1
+                            fi
+                        fi
+                        ;;
+                esac
+                return 0
+            }
 
             # Copy the container icon files the launcher cannot see into the
             # host icon dir, keeping the hicolor/<size>/apps layout. The
@@ -90,6 +141,43 @@ export_container() {
                         mkdir -p "$host_icons/$(dirname "$rel")"
                         cp -f "$file" "$host_icons/$rel"
                     done
+            }
+
+            # distrobox-export posts /usr/share icons into the host icon dir
+            # only when the destination does not exist yet. Refresh the copies
+            # that are already mirrored (cp -f); new destinations stay
+            # distrobox-export business, and shared theme dirs are never
+            # deleted from. The path mapping mirrors distrobox-export.
+            refresh_named_icon() {
+                icon="$1"
+                case "$icon" in "" | */*) return 0 ;; esac
+                for dir in /usr/share/icons /usr/share/pixmaps /var/lib/flatpak/exports/share/icons; do
+                    [ -d "$dir" ] || continue
+                    find "$dir" -type f \
+                        \( -name "${icon}.png" -o -name "${icon}.svg" -o -name "${icon}.xpm" \) 2>/dev/null |
+                        while IFS= read -r file; do
+                            dest="$(printf "%s" "$file" |
+                                sed -e "s|/usr/share/|/run/host${host_home}/.local/share/|g" \
+                                    -e "s|/var/lib/flatpak/exports/share|/run/host${host_home}/.local/share/|g" \
+                                    -e "s|pixmaps|icons|g")"
+                            [ -e "$dest" ] || continue
+                            cp -f "$file" "$dest" 2>/dev/null || true
+                        done
+                done
+            }
+
+            # An absolute Icon= value can point into this container filesystem
+            # (a path the launcher inside the GUI container cannot read). Keep
+            # a copy under the host app-icons dir; the host pass repoints the
+            # exported Icon= at it.
+            copy_absolute_icon() {
+                icon="$1"
+                desktop="$2"
+                ext="${icon##*.}"
+                [ "$ext" != "$icon" ] || ext=png
+                case "$ext" in png|svg|xpm|jpg|jpeg|webp) ;; *) ext=png ;; esac
+                mkdir -p "$host_app_icons"
+                cp -f "$icon" "$host_app_icons/${container}-$(basename "$desktop" .desktop).${ext}" || true
             }
 
             # Largest canonical hicolor size of a square icon (0 = none); used
@@ -146,40 +234,32 @@ export_container() {
                 printf %s "${first##*/}"
             }
 
-            # Wine (and friends) install menu entries in subdirectories
-            # (~/.local/share/applications/wine/Programs/...), so scan
-            # recursively instead of only the top level.
+            # 1) Report the export candidates first, so the host-side prune
+            #    still gets a complete list if the export phase times out. The
+            #    sentinel marks a complete list; without it nothing is pruned.
+            if [ -n "$manifest" ]; then
+                for dir in "$HOME/.local/share/applications" /usr/local/share/applications /usr/share/applications; do
+                    [ -d "$dir" ] || continue
+                    find "$dir" -type f -name "*.desktop" 2>/dev/null |
+                    while IFS= read -r f; do
+                        desktop_file_ok "$f" || continue
+                        printf "%s\n" "$(basename "$f")" >>"$manifest"
+                    done
+                done
+                printf "HYPRTOMIC-DONE\n" >>"$manifest"
+            fi
+
+            # 2) Export and refresh the icons. Wine (and friends) install menu
+            #    entries in subdirectories (~/.local/share/applications/wine/
+            #    Programs/...), so scan recursively instead of only the top
+            #    level.
             for dir in "$HOME/.local/share/applications" /usr/local/share/applications /usr/share/applications; do
                 [ -d "$dir" ] || continue
                 find "$dir" -type f -name "*.desktop" 2>/dev/null |
                 while IFS= read -r f; do
-                    grep -q "^NoDisplay=true" "$f" && continue
-                    grep -q "^Hidden=true" "$f" && continue
-                    # Never wrap an entry that already runs through distrobox
-                    # (a distrobox-export result or a manual entry). Match the
-                    # distrobox commands, not the bare word: container homes
-                    # live under ~/distrobox/<name>/, so a wine WINEPREFIX or
-                    # an app installed into such a path would otherwise be
-                    # skipped.
-                    grep -qE "^Exec=(.*[[:space:]/])?distrobox(-(host-exec|enter|export))?([[:space:]]|\$)" "$f" && continue
-                    exec_line="$(sed -n "s/^Exec=//p" "$f" | head -n 1)"
-                    case "$f" in
-                        "$HOME"/.local/share/applications/*)
-                            # Shared home ($host_home == $HOME) also holds the
-                            # host entries and every other container entries. Only
-                            # wrap what this container can actually run, so one
-                            # container never registers the apps of another one
-                            # (or the host ones) under its own name. Entries
-                            # without Exec (e.g. Type=Link) keep the old
-                            # behaviour.
-                            if [ "$host_home" = "$HOME" ] && [ -n "$exec_line" ]; then
-                                bin="$(exec_binary "$exec_line")"
-                                [ -n "$bin" ] || continue
-                                command -v "$bin" >/dev/null 2>&1 || continue
-                            fi
-                            ;;
-                    esac
-                    icon="$(sed -n "s/^Icon=//p" "$f" | head -n 1)"
+                    desktop_file_ok "$f" || continue
+                    raw_icon="$(sed -n "s/^Icon=//p" "$f" | head -n 1)"
+                    icon="$raw_icon"
                     # Steam games it has no icon for point at Icon=steam; treat
                     # them as the per-game icon (fix_steam_icons renames the
                     # exported copy), so mirroring/cover art applies.
@@ -188,6 +268,21 @@ export_container() {
                         [ -n "$appid" ] && icon="steam_icon_${appid}"
                     fi
                     distrobox-export --app "$f" >/dev/null 2>&1 || true
+                    case "$raw_icon" in
+                        /*)
+                            # Absolute paths may live in this container (or a
+                            # sibling container home) where the launcher cannot
+                            # read them; keep a copy it can.
+                            if [ -e "$raw_icon" ]; then
+                                copy_absolute_icon "$raw_icon" "$f"
+                            fi
+                            ;;
+                        "")
+                            ;;
+                        *)
+                            refresh_named_icon "$raw_icon"
+                            ;;
+                    esac
                     mirror_home_icon "$icon"
                     case "$icon" in
                         steam_icon_*) steam_cover_icon "$icon" ;;
@@ -205,6 +300,33 @@ mark_exports() {
         [ -f "$f" ] || continue
         grep -q "^${MARKER}" "$f" && continue
         sed -i "/^\[Desktop Entry\]$/a ${MARKER}${name}" "$f"
+    done
+}
+
+# Remove the exports of a running container whose source .desktop file is not
+# in the manifest (app uninstalled, entry hidden, entry turned into a distrobox
+# entry). Only files this script marked for the container -- and that still
+# look like distrobox exports -- are considered, so unrelated or user-created
+# files that merely share the prefix are never touched. The manifest only
+# reaches this function with the HYPRTOMIC-DONE sentinel, so a partial list
+# from a timed-out pass cannot delete valid entries.
+prune_container_exports() {
+    local name="$1" manifest="$2" f base src line
+    local present=$'\n'
+    while IFS= read -r line; do
+        [ "$line" = "HYPRTOMIC-DONE" ] && break
+        present+="$line"$'\n'
+    done <"$manifest"
+    for f in "$APPS_DIR/${name}-"*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q "^${MARKER}${name}$" "$f" || continue
+        grep -qE '^Exec=.*(distrobox-enter|distrobox enter)' "$f" || continue
+        base="$(basename "$f")"
+        src="${base#"$name"-}"
+        case "$present" in
+            *$'\n'"$src"$'\n'*) ;;
+            *) rm -f "$f"; log "removed stale export: $base" ;;
+        esac
     done
 }
 
@@ -228,6 +350,43 @@ fix_steam_icons() {
     done
 }
 
+# Absolute Icon= values may point into a container-only path (for example a
+# sibling distrobox home) that the launcher inside the GUI container cannot
+# read: copy the file into the app-icons override dir (resolve-icons.py checks
+# it first) and repoint Icon= there. Idempotent -- entries already pointing
+# into app-icons are skipped, the copy is refreshed with cp -f on every pass --
+# and a file that can be read neither on the host nor through the container's
+# own copy is left alone.
+fix_absolute_icons() {
+    local name="$1" f icon base target ext esc
+    for f in "$APPS_DIR/${name}-"*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q "^${MARKER}${name}$" "$f" || continue
+        icon="$(sed -n 's/^Icon=//p' "$f" | head -n 1)"
+        case "$icon" in /*) ;; *) continue ;; esac
+        case "$icon" in "$APP_ICONS_DIR"/*) continue ;; esac
+        base="$(basename "$f")"
+        base="${base#"$name"-}"
+        base="${base%.desktop}"
+        [ -n "$base" ] || continue
+        ext="${icon##*.}"
+        [ "$ext" != "$icon" ] || ext="png"
+        case "$ext" in png|svg|xpm|jpg|jpeg|webp) ;; *) ext="png" ;; esac
+        target="$APP_ICONS_DIR/${name}-${base}.${ext}"
+        if [ -f "$icon" ] && [ -r "$icon" ]; then
+            mkdir -p "$APP_ICONS_DIR"
+            cp -f "$icon" "$target" 2>/dev/null || continue
+        elif [ ! -f "$target" ]; then
+            continue
+        fi
+        # Escape the replacement for sed (paths rarely contain these).
+        esc="${target//\\/\\\\}"
+        esc="${esc//&/\\&}"
+        esc="${esc//|/\\|}"
+        sed -i "s|^Icon=.*|Icon=${esc}|" "$f"
+    done
+}
+
 # Remove exports whose container no longer exists. Only marked files are
 # touched, and only when distrobox actually reported a container list.
 prune_stale() {
@@ -243,6 +402,79 @@ prune_stale() {
     done
 }
 
+# distrobox itself creates <container>.desktop entries
+# (Exec=/usr/bin/distrobox enter <name>, TryExec=/usr/bin/distrobox,
+# Categories=Distrobox;System;Utility) and never removes them when the
+# container is deleted. Never touch arbitrary files: the file name must equal
+# the container name parsed from the Exec line, those exact TryExec/Categories
+# lines must be present, the Exec line must have distrobox's shape and the file
+# must not carry our marker (marked files belong to prune_stale). A file that
+# does not match every condition is left alone, so a hand-written or
+# user-renamed entry cannot be deleted by accident.
+prune_container_entries() {
+    local known="$1" f base target
+    for f in "$APPS_DIR"/*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q "^${MARKER}" "$f" && continue
+        grep -q '^TryExec=/usr/bin/distrobox$' "$f" || continue
+        grep -q '^Categories=Distrobox;System;Utility$' "$f" || continue
+        grep -q '^Exec=/usr/bin/distrobox enter[[:space:]]' "$f" || continue
+        base="$(basename "$f" .desktop)"
+        [ -n "$base" ] || continue
+        target="$(sed -n 's|^Exec=/usr/bin/distrobox enter[[:space:]]\{1,\}\([^[:space:]]*\).*|\1|p' "$f" | head -n 1)"
+        [ "$target" = "$base" ] || continue
+        case " ${known} " in
+            *" ${target} "*) ;;
+            *) rm -f "$f"; log "removed stale container entry: $(basename "$f")" ;;
+        esac
+    done
+}
+
+# Remove Steam cover-art overrides for games that no longer have an export.
+# Only the exact files this script writes (steam_icon_<appid>.jpg in
+# app-icons) are considered; a user-made override keeps its own name.
+prune_stale_cover_art() {
+    local f appid refs="" jpg
+    [ -d "$APP_ICONS_DIR" ] || return 0
+    for f in "$APPS_DIR"/*.desktop; do
+        [ -f "$f" ] || continue
+        appid="$(sed -n 's/^Icon=steam_icon_\([0-9][0-9]*\)$/\1/p' "$f" | head -n 1)"
+        [ -n "$appid" ] && refs="${refs}${appid} "
+    done
+    for jpg in "$APP_ICONS_DIR"/steam_icon_*.jpg; do
+        [ -f "$jpg" ] || continue
+        appid="$(basename "$jpg")"
+        appid="${appid#steam_icon_}"
+        appid="${appid%.jpg}"
+        # Only Steam appids are pruned; leave anything else alone.
+        case "$appid" in '' | *[!0-9]*) continue ;; esac
+        case " $refs " in
+            *" $appid "*) ;;
+            *) rm -f "$jpg"; log "removed stale cover art: $(basename "$jpg")" ;;
+        esac
+    done
+}
+
+# Register one running container: export, then converge its per-app entries,
+# icons and Steam cover art.
+sync_container() {
+    local name="$1" manifest
+    manifest="$(mktemp "${STATE_DIR}/distrobox-apps-manifest.XXXXXX" 2>/dev/null)" || manifest=""
+    export_container "$name" "$manifest" || true
+    mark_exports "$name" || true
+    if [ -n "$manifest" ] && grep -qx 'HYPRTOMIC-DONE' "$manifest" 2>/dev/null; then
+        prune_container_exports "$name" "$manifest" || true
+    else
+        # No/incomplete source list (timeout, or the container cannot write
+        # the shared home): keep its exports instead of pruning from a
+        # partial list.
+        log "source list for '$name' incomplete; keeping its exports"
+    fi
+    [ -n "$manifest" ] && rm -f "$manifest"
+    fix_steam_icons "$name" || true
+    fix_absolute_icons "$name" || true
+}
+
 # One registration pass over the running containers. Returns non-zero when it
 # skipped (no distrobox / no container list), so --watch retries.
 sync() {
@@ -254,7 +486,7 @@ sync() {
     # anything (pruning would delete every export).
     [ -n "$all" ] || { log "no containers reported; skipping"; return 1; }
 
-    mkdir -p "$APPS_DIR"
+    mkdir -p "$APPS_DIR" "$STATE_DIR"
 
     running="$(running_container_names)"
     local c
@@ -262,14 +494,16 @@ sync() {
         [ -n "$c" ] || continue
         [ "$c" = "$CONTAINER" ] && continue
         log "registering apps from '$c' ..."
-        export_container "$c" || true
-        mark_exports "$c" || true
-        fix_steam_icons "$c" || true
+        sync_container "$c"
     done <<< "$running"
 
     # Prune against every container, not just the running ones: a stopped
     # container keeps its registered apps.
-    prune_stale "$(printf '%s ' $all)"
+    local known
+    known="$(printf '%s ' $all)"
+    prune_stale "$known"
+    prune_container_entries "$known"
+    prune_stale_cover_art
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
     fi
@@ -282,9 +516,8 @@ sync() {
 watch() {
     # Only one watcher: one started by hand (or a stale one from a previous
     # login) must not stack.
-    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
-    mkdir -p "$state_dir"
-    exec 9>"$state_dir/distrobox-apps-watch.lock"
+    mkdir -p "$STATE_DIR"
+    exec 9>"$STATE_DIR/distrobox-apps-watch.lock"
     flock -n 9 || { log "another watcher is already running; exiting"; return 0; }
 
     local last="" cur

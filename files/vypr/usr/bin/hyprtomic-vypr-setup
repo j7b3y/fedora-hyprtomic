@@ -171,12 +171,40 @@ guest_exe_mode() {
 
 # --------------------------------------------------------------------- domain
 
+# Domain names, or a single ERROR line when libvirt itself is unreachable.
+# Runs through a subshell (mapfile/command substitution), so the error cannot
+# be a global variable - it is printed as a marked line instead.
+list_domains() {
+    local out rc
+    out=$(virsh list --all --name 2>&1); rc=$?
+    if [ "$rc" -ne 0 ] && have sudo; then
+        out=$(sudo virsh list --all --name 2>&1); rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+        printf 'ERROR\t%s\n' "$(printf '%s' "$out" | head -2 | tr '\n' ' ')"
+        return 1
+    fi
+    printf '%s\n' "$out" | grep -v '^$' || true
+}
+
 choose_domain() {
     local -a domains=()
-    mapfile -t domains < <(virsh_out list --all --name 2>/dev/null | grep -v '^$')
+    local raw d
+    raw=$(list_domains)
+    if printf '%s' "$raw" | grep -q '^ERROR'; then
+        bad "could not talk to libvirt:"
+        printf '%s' "$raw" | sed -n 's/^ERROR\t//p' | sed 's/^/      /'
+        info "if the daemons are not up: sudo systemctl enable --now virtqemud.socket virtnetworkd.socket"
+        exit 1
+    fi
+    while IFS= read -r d; do
+        [ -n "$d" ] && domains+=("$d")
+    done <<< "$raw"
     if [ "${#domains[@]}" -eq 0 ]; then
-        bad "no libvirt domains found. Create your Windows VM first (virt-manager);"
-        bad "Vypr configures an existing VM, it does not build one."
+        bad "no libvirt domains exist yet. Vypr configures an existing VM, it"
+        bad "does not create one. Create the Windows VM first:"
+        info "  ujust vypr-create-vm ~/Downloads/Windows11.iso   (virt-install, Vypr-ready)"
+        info "  or virt-manager, then re-run ujust vypr-setup."
         exit 1
     fi
 
@@ -236,19 +264,29 @@ collect_root_steps() {
         ROOT_STEPS+=("[ -f /etc/libvirt/qemu.conf.hyprtomic-vypr.bak ] || cp -a /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.hyprtomic-vypr.bak; sed -i 's|^#\\?user = .*|user = \"$USER_NAME\"|' /etc/libvirt/qemu.conf; sed -i 's|^#\\?group = .*|group = \"$USER_GROUP\"|' /etc/libvirt/qemu.conf; systemctl restart virtqemud 2>/dev/null || true")
     fi
 
-    # Modular libvirt daemons + the default NAT network.
-    ROOT_STEPS+=("systemctl enable --now virtqemud.socket virtnetworkd.socket 2>/dev/null || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
+    # Modular libvirt daemons, the state directories and labels the image's
+    # /var wipe loses, and the default NAT network. The label part heals a
+    # machine that already booted with /var/lib/libvirt as var_lib_t, where
+    # virtnetworkd cannot create its dnsmasq directory (see
+    # usr/lib/tmpfiles.d/10-vypr-libvirt.conf in the image).
+    ROOT_STEPS+=("mkdir -p /var/lib/libvirt/dnsmasq /var/lib/libvirt/boot /var/lib/libvirt/filesystems /var/lib/libvirt/network; restorecon -R /var/lib/libvirt /var/cache/libvirt /var/log/libvirt 2>/dev/null || true; systemctl enable --now virtqemud.socket virtnetworkd.socket 2>/dev/null || true; systemctl restart virtnetworkd 2>/dev/null || true; virsh net-info default >/dev/null 2>&1 || virsh net-define /usr/share/libvirt/networks/default.xml >/dev/null 2>&1 || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
 
     # IOMMU: passthrough needs it, and it is a kargs change on atomic hosts.
+    # Only offered when the firmware exposes an IOMMU at all (DMAR on Intel,
+    # IVRS on AMD); with a hidden BIOS setting the karg cannot help.
     local groups
     groups=$(ls -1 /sys/kernel/iommu_groups 2>/dev/null | wc -l)
     if [ "$groups" -gt 1 ]; then
         ok "IOMMU is on ($groups groups)"
-    else
+    elif [ -e /sys/firmware/acpi/tables/DMAR ] || [ -e /sys/firmware/acpi/tables/IVRS ]; then
         local args="amd_iommu=on iommu=pt"
         grep -qi "GenuineIntel" /proc/cpuinfo && args="intel_iommu=on iommu=pt"
         warn "IOMMU is off; passthrough needs it after a reboot"
         ROOT_STEPS+=("rpm-ostree kargs --append-if-missing=${args%% *} --append-if-missing=${args##* }")
+    else
+        warn "IOMMU is off and the firmware exposes no DMAR/IVRS table, so the"
+        warn "OS cannot turn it on (a hidden BIOS setting is the usual reason)."
+        warn "PCI passthrough - and with it Vypr - needs IOMMU."
     fi
 
     # Firewall: firewalld trusts the libvirt zone (virbr0) by default. ufw does
@@ -310,6 +348,14 @@ main() {
     if [ -z "$dom_xml" ]; then
         bad "could not read the XML of '$DOMAIN'"
         exit 1
+    fi
+
+    # Vypr reads frames out of a passed-through GPU; without a hostdev there is
+    # nothing to read, and that is easy to miss until the first launch fails.
+    if ! printf '%s' "$dom_xml" | grep -q "<hostdev"; then
+        warn "the VM passes no PCI device through, so Vypr has no GPU to read"
+        warn "frames from. Attach one in virt-manager (Add Hardware > PCI Host"
+        warn "Device); it must be alone in its IOMMU group."
     fi
 
     # The share question, before the XML edit so both changes land together.

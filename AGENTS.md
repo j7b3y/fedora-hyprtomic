@@ -211,15 +211,36 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
   ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
   together — host and guest protocol versions must match.
-- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`):
-  picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
-  USB tablet, topoext, emulated sound card, optional virtiofs share), checks
-  qemu.conf/libvirt group/default network/IOMMU kargs and offers the root steps
-  via sudo after confirmation, creates `~/.ssh/vypr-guest` and
-  `~/.config/vypr/config`. It is idempotent and **never rewrites** an existing
-  config (only appends missing keys). `ujust vypr-guest-exe` copies the
-  installer to `~/Downloads` and prints the public key; `ujust vypr-doctor`
-  runs Vypr's own health check.
+- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`) and
+  configures an **existing** VM (it never creates one): picks a libvirt domain,
+  edits the domain XML (memfd shared RAM, removes the USB tablet, topoext,
+  emulated sound card, optional virtiofs share), checks qemu.conf/libvirt
+  group/default network/IOMMU kargs and offers the root steps via sudo after
+  confirmation, creates `~/.ssh/vypr-guest` and `~/.config/vypr/config`. It is
+  idempotent and **never rewrites** an existing config (only appends missing
+  keys). When there is no domain it points at `ujust vypr-create-vm`.
+  `ujust vypr-guest-exe` copies the installer to `~/Downloads` and prints the
+  public key; `ujust vypr-doctor` runs Vypr's own health check.
+- **VM creation**: `ujust vypr-create-vm <iso>` runs
+  `hyprtomic-vypr-create-vm`: virt-install with UEFI + Secure Boot + TPM 2.0,
+  SATA disk and e1000e NIC (no extra Windows drivers), no USB tablet, and an
+  optional passed-through GPU (boot_vga cards are excluded; the HDMI audio
+  function is matched by subsystem id and attached too; virt-install's hostdev
+  is managed, so libvirt detaches/reattaches the card around VM runs). If the
+  ISO's directory has non-UTF-8 file names (virt-install crashes listing them
+  in the auto-created pool), the ISO is hardlinked into
+  `~/.local/share/vypr/iso/` first. The ISO is a normal argument.
+- **libvirt state dirs**: BlueBuild wipes `/var`, so the RPM-created
+  `/var/lib/libvirt/**` and their SELinux labels are missing from the image;
+  on first boot the daemons recreate them as `var_lib_t` and `virtnetworkd`
+  (enforcing) cannot create `dnsmasq/`, leaving the default network down.
+  `files/vypr/usr/lib/tmpfiles.d/10-vypr-libvirt.conf` recreates + relabels
+  the tree at boot, and the ujust root steps run `restorecon` + `net-define`
+  to heal a machine that already booted without it.
+- **IOMMU**: the kargs step (`rpm-ostree kargs --append-if-missing=...`) is
+  only offered when the firmware exposes DMAR/IVRS but the kernel has IOMMU
+  off. If neither table exists (hidden BIOS setting) the scripts say the OS
+  cannot enable it rather than adding a useless karg.
 - **Atomic updates**: `~/.config/vypr/**`, `~/.ssh/vypr-guest*`, registered
   `.desktop`/icons are in `$HOME`; domain XML is in `/etc/libvirt/qemu/`;
   qemu.conf, `/etc/libvirt/hooks/qemu`, `/etc/modprobe.d/` and
@@ -333,7 +354,8 @@ End-to-end: on a test machine, update the host image, reboot, run
   firstboot services and the ujust recipes are in place.
 - Vypr ships as a second host tag (`latest-vypr`, see "Vypr" above): the
   host binaries + `vypr-setup.exe` are built/downloaded at image build time,
-  `ujust vypr-setup` configures the VM and the guest setup at any time, and
+  `ujust vypr-create-vm <iso>` creates the Windows VM (GPU attach included),
+  `ujust vypr-setup` configures it and the guest setup at any time, and
   the GUI container's `/usr/bin/vypr` shim makes the registered apps work
   from the launcher. The `:latest` image is unchanged and has none of it.
 - The hostname is not assigned at first boot: the installer's name (os-release

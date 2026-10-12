@@ -9,8 +9,18 @@
 # audio, optional virtiofs folder share, qemu.conf (root steps after
 # confirmation), host->guest key and ~/.config/vypr/config. Idempotent; an
 # existing config is never rewritten. Run again whenever you like.
+# (This does NOT create a VM - see vypr-create-vm below.)
 vypr-setup:
     @/usr/bin/hyprtomic-vypr-setup
+
+# Create a Vypr-ready Windows VM (UEFI + Secure Boot + TPM 2.0, SATA disk,
+# e1000e NIC) with virt-install. Pass the Windows ISO as the argument; an
+# optional passed-through GPU is attached at creation (with its audio
+# function). Finish the Windows installation in the virt-manager console,
+# then run 'ujust vypr-setup'.
+# Example: ujust vypr-create-vm ~/Downloads/Windows11.iso
+vypr-create-vm iso:
+    @/usr/bin/hyprtomic-vypr-create-vm "{{ iso }}"
 
 # Vypr's own health check: qemu.conf user/group, whether the running VM's
 # memory is readable, the guest SSH link, shared folder, UAC and notifications.

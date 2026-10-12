@@ -45,25 +45,35 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 [Vypr](https://github.com/Amzi-01/Vypr) は、libvirt の Windows VM 内のアプリを 1 アプリ = 1 ネイティブウィンドウとして Linux デスクトップに表示するツールです（RDP やコーデックなし、パススルー GPU のフレームを共有メモリ経由で表示）。`latest-vypr` イメージには Vypr 本体と libvirt/QEMU/virtiofsd/virt-manager が同梱され、`latest` イメージは従来どおり軽量なままです。どちらも同じリポジトリの別タグなので、`rpm-ostree` の rebase/upgrade で取り違えることはありません。
 
 - バイナリは [v0.5.0](https://github.com/Amzi-01/Vypr/releases/tag/v0.5.0) に固定してビルド時にコンパイルし、同タグの `vypr-setup.exe`（Windows 側インストーラー）も `/usr/share/vypr/` に同梱します。プロトコルが両側で一致します。
-- ホスト側のセットアップ（VM 構成 + ゲスト準備）は `ujust vypr-setup` で任意のタイミングで実行できます。冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。
+- **`ujust vypr-setup` は既存 VM を構成するコマンドです（VM は作りません）**。VM がまだ無い場合は先に作成してください:
+  - `ujust vypr-create-vm ~/Downloads/Windows11.iso` … virt-install で Vypr 向けの Windows 11 VM（UEFI + Secure Boot + TPM 2.0、SATA ディスク、e1000e NIC）を作成。単独で渡せる GPU があれば作成時にパススルー（HDMI オーディオ機能込み）もアタッチします。
+  - または virt-manager で手動作成。
+- ホスト側のセットアップ（既存 VM の構成 + ゲスト準備）は `ujust vypr-setup` で任意のタイミングで実行できます。冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。
 
 ```bash
 # 1. ホストを latest-vypr へ（既存 latest からの切り替え）
 sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr
 systemctl reboot
 
-# 2. VM 構成 + ホスト→ゲスト鍵 + 設定（何度でも再実行可）
+# 2. Windows VM を作成（既にある場合はスキップ）
+ujust vypr-create-vm ~/Downloads/Windows11.iso
+#    → 表示されるコンソールで Windows をインストール:
+#      virt-manager --show-domain-console win11
+
+# 3. Windows インストール後: VM 構成 + ホスト→ゲスト鍵 + 設定（何度でも再実行可）
 ujust vypr-setup
 
-# 3. ゲスト側: vypr-setup.exe を ~/Downloads へ出して公開鍵を表示
+# 4. ゲスト側: vypr-setup.exe を ~/Downloads へ出して公開鍵を表示
 ujust vypr-guest-exe
 
-# 4. Windows にコピーして実行 → 公開鍵を貼り付け → Windows 再起動
-# 5. アプリ登録（VM が起動していなければ起動します）
+# 5. Windows にコピーして実行 → 公開鍵を貼り付け → Windows 再起動
+# 6. アプリ登録（VM が起動していなければ起動します）
 ujust vypr-detect            # ゲストのショートカット/Steam を検出して選択
 # または: vypr add fivem 'C:\Users\You\Desktop\FiveM.lnk' --name FiveM
 ```
 
+- `vypr-create-vm` は Windows インストーラーが追加ドライバー無しで動くよう SATA/e1000e で作り、USB タブレットを追加しません（マウスは最初から相対）。GPU をアタッチした場合は libvirt が VM 実行中だけホストドライバーからデタッチします（managed hostdev）。ブート GPU は候補から除外します。
+- ISO の置き場に非 UTF-8 のファイル名があると virt-install がボリューム列挙で落ちるため、その場合だけ ISO を `~/.local/share/vypr/iso/` にハードリンクして使います。
 - 登録したアプリは `~/.local/share/applications/vypr-<app>.desktop` に書かれ、`$HOME` 共有経由でランチャーの「コンテナ（hyprtomic-gui）」ソースにそのまま並びます。GUI コンテナ内の `/usr/bin/vypr` は `distrobox-host-exec` でホストの実体へ転送するので、ランチャーからも通常のホストターミナルからも同じエントリで起動できます。
 - Hyprland では `vypr-*` ウィンドウを既定で **float** にし（サイズはゲスト側が所有するため）、`idle_inhibit=focus` と `no_blur` を付けています（`hyprland.lua` の `float-vypr` ルール。ゲームもウィンドウ表示前提）。変更したい場合は `local.conf` で上書きできます。
 
@@ -75,9 +85,10 @@ ujust vypr-detect            # ゲストのショートカット/Steam を検出
   - `/etc/libvirt/qemu.conf`、`/etc/libvirt/hooks/qemu`、`/etc/modprobe.d/` → 同じく `/etc`。`hyprtomic-vypr-setup` は qemu.conf を編集する前に `qemu.conf.hyprtomic-vypr.bak` を残します。
   - Vypr のバイナリ（`/usr/bin/vypr*`、`/usr/share/vypr/`）だけがイメージ管理で、更新に追従します。**ユーザー設定はイメージ更新の対象外**です。
 - **PCIe パススルー / IOMMU**:
-  - IOMMU のカーネル引数は `ujust vypr-setup` が不足時に検出して `rpm-ostree kargs --append-if-missing=intel_iommu=on iommu=pt`（AMD は `amd_iommu=on`）を提案・実行します。解除は `sudo rpm-ostree kargs --delete=...`。デプロイ単位で保持されます。
+  - IOMMU のカーネル引数は、ファームウェアが DMAR（Intel）/ IVRS（AMD）を公開していて IOMMU が無効な場合に `ujust vypr-setup` / `ujust vypr-create-vm` が検出して `rpm-ostree kargs --append-if-missing=intel_iommu=on iommu=pt`（AMD は `amd_iommu=on`）を提案・実行します。解除は `sudo rpm-ostree kargs --delete=...`。デプロイ単位で保持されます。BIOS に設定自体が無い場合は OS からは有効化できず、その旨を表示します。
   - vfio-pci へのブート時バインドは `/etc/modprobe.d/vfio.conf`（可変 `/etc`）で行い、解除も同じファイルの削除で済みます。initramfs は `rpm-ostree initramfs --enable` で再生成します。
-  - ブート時にカードを渡したくない場合は Vypr の GPU swap（`ujust vypr-gpu-swap` が手順を表示。libvirt フックを `/etc/libvirt/hooks/qemu` に置く方式）が使えます。どちらもイメージ更新に上書きされません。
+  - ブート時にカードを渡したくない場合は Vypr の GPU swap（`ujust vypr-gpu-swap` が手順を表示。libvirt フックを `/etc/libvirt/hooks/qemu` に置く方式）が使えます。`vypr-create-vm` / virt-manager の hostdev は `managed='yes'` なので、libvirt 自身が起動時だけデタッチする方式です。どちらもイメージ更新に上書きされません。
+  - BlueBuild はビルド時に `/var` を消すため、libvirt の状態ディレクトリはイメージに含まれません。`latest-vypr` は `tmpfiles.d` で再作成・再ラベル（SELinux）し、`virtnetworkd` が既定ネットワークを起動できるようにしています（古いブートでラベルが壊れていても ujust の root ステップが修復します）。
 - **注意**: `vypr-setup.exe` を実行した Windows は「Lock pages in memory」権限と自動ログイン、SSH サーバー、任意で UAC 無効化（`OPEN_ELEVATION=1`）が設定されます。UAC の無効化は VM のセキュリティを下げるので、`vypr open-elevation --remove` で戻せます。`ujust vypr-doctor` が現在の状態を確認できます。
 
 ## インストール

@@ -1,0 +1,431 @@
+#!/usr/bin/env bash
+# hyprtomic-vypr-create-vm - create a Vypr-ready Windows VM with virt-install.
+#
+# Vypr configures an existing VM, it does not create one. This is the piece
+# that creates one when there is none: UEFI + Secure Boot + TPM 2.0 (Windows
+# 11), a SATA disk and an e1000e NIC so the Windows installer needs no extra
+# drivers, and optionally a passed-through GPU (with its HDMI audio function)
+# attached at creation. Finish the Windows installation in the virt-manager
+# console this prints, then run `ujust vypr-setup`.
+#
+# The Windows ISO is a normal argument:
+#
+#   hyprtomic-vypr-create-vm [options] /path/to/Windows11.iso
+#
+# Options:
+#   --name NAME       domain name (default: win11)
+#   --memory MB       RAM in MiB (default: 8192)
+#   --vcpus N         vCPUs (default: 4)
+#   --disk-size GB    disk size in GiB (default: 64)
+#   --gpu ADDR|auto|none
+#                     passed-through GPU to attach; default asks when one is
+#                     usable, `auto` picks the first, `none` attaches nothing
+#   --dry-run         print the virt-install command and exit
+#   --yes             run the root-owned steps without asking
+#   -h, --help        this text
+set -uo pipefail
+
+export LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
+
+NAME="win11"
+MEMORY=8192
+VCPUS=4
+DISK=64
+GPU_SPEC=""
+DRY_RUN=0
+ASSUME_YES=0
+ISO=""
+
+bold=$(tput bold 2>/dev/null || true); dim=$(tput dim 2>/dev/null || true)
+red=$(tput setaf 1 2>/dev/null || true); grn=$(tput setaf 2 2>/dev/null || true)
+ylw=$(tput setaf 3 2>/dev/null || true); rst=$(tput sgr0 2>/dev/null || true)
+ok()   { printf '  %s✓%s %s\n' "$grn" "$rst" "$*"; }
+warn() { printf '  %s!%s %s\n' "$ylw" "$rst" "$*"; }
+bad()  { printf '  %s✗%s %s\n' "$red" "$rst" "$*"; }
+info() { printf '  %s·%s %s\n' "$dim" "$rst" "$*"; }
+head2(){ printf '\n%s%s%s\n' "$bold" "$*" "$rst"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --name)      NAME="${2:-}"; shift 2 ;;
+        --memory)    MEMORY="${2:-}"; shift 2 ;;
+        --vcpus)     VCPUS="${2:-}"; shift 2 ;;
+        --disk-size) DISK="${2:-}"; shift 2 ;;
+        --gpu)       GPU_SPEC="${2:-}"; shift 2 ;;
+        --dry-run)   DRY_RUN=1; shift ;;
+        --yes)       ASSUME_YES=1; shift ;;
+        -h|--help)   usage; exit 0 ;;
+        -*)          echo "hyprtomic-vypr-create-vm: unknown option: $1" >&2; usage; exit 2 ;;
+        *)           ISO="$1"; shift ;;
+    esac
+done
+
+[ -n "$ISO" ] || { echo "hyprtomic-vypr-create-vm: the Windows ISO is required" >&2; usage; exit 2; }
+case "$MEMORY" in *[!0-9]*|"") bad "--memory must be a number of MiB"; exit 2 ;; esac
+case "$VCPUS"  in *[!0-9]*|"") bad "--vcpus must be a number"; exit 2 ;; esac
+case "$DISK"   in *[!0-9]*|"") bad "--disk-size must be a number of GiB"; exit 2 ;; esac
+
+# ---------------------------------------------------------------- virsh, safely
+virsh_do() {
+    local out rc
+    out=$(virsh "$@" 2>&1); rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    if have sudo; then
+        out=$(sudo virsh "$@" 2>&1); rc=$?
+        [ "$rc" -eq 0 ] && return 0
+    fi
+    printf '%s\n' "$out" >&2
+    return "$rc"
+}
+
+virsh_out() {
+    local out
+    out=$(virsh "$@" 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
+    if have sudo; then
+        out=$(sudo virsh "$@" 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
+    fi
+    return 1
+}
+
+# ------------------------------------------------------------------ GPUs
+gpu_devices() {
+    { lspci -Dn -d ::0300 2>/dev/null; lspci -Dn -d ::0302 2>/dev/null; } |
+        awk '{print $1}' | sort -u
+}
+pci_class()    { cat "/sys/bus/pci/devices/$1/class" 2>/dev/null; }
+pci_boot_vga() { cat "/sys/bus/pci/devices/$1/boot_vga" 2>/dev/null; }
+pci_driver()   { local p; p=$(readlink -f "/sys/bus/pci/devices/$1/driver" 2>/dev/null); [ -n "$p" ] && basename "$p"; }
+# readlink -f prints its argument even when the last component does not exist,
+# so a device with no iommu_group symlink (IOMMU off) would look grouped.
+# Require the resolved group directory to exist.
+pci_group() {
+    local g
+    g=$(readlink -f "/sys/bus/pci/devices/$1/iommu_group" 2>/dev/null) || return 1
+    [ -e "$g/devices" ] || return 1
+    printf '%s' "$g"
+}
+pci_slot()     { printf '%s' "$1" | sed 's/\.[0-9]*$//'; }
+pci_subsys()   { printf '%s:%s' "$(cat "/sys/bus/pci/devices/$1/subsystem_vendor" 2>/dev/null)" "$(cat "/sys/bus/pci/devices/$1/subsystem_device" 2>/dev/null)"; }
+gpu_name()     { lspci -Dmm -s "$1" 2>/dev/null | awk -F'"' '{printf "%s %s", $4, $6}'; }
+
+# Everything in the card's IOMMU group that is neither another function of the
+# same card nor a bridge: with any of those, the group cannot be passed through.
+group_strays() {
+    local dev="$1" grp slot m cls
+    grp=$(basename "$(pci_group "$dev")") || return 0
+    slot=$(pci_slot "$dev")
+    for m in /sys/kernel/iommu_groups/"$grp"/devices/*; do
+        [ -e "$m" ] || continue
+        m=$(basename "$m")
+        [ "$(pci_slot "$m")" = "$slot" ] && continue
+        cls=$(pci_class "$m")
+        case "$cls" in 0x0600*|0x0604*) continue ;; esac
+        printf '%s\n' "$m"
+    done
+}
+
+# The HDMI audio function that belongs to a card, wherever the board put it
+# (same slot on most boards, a separate slot on some). Matched by subsystem id.
+gpu_audio_devices() {
+    local gpu="$1" subsys d
+    subsys=$(pci_subsys "$gpu")
+    [ -n "$subsys" ] && [ "$subsys" != ":" ] || return 0
+    for d in /sys/bus/pci/devices/*; do
+        [ -f "$d/class" ] || continue
+        case "$(cat "$d/class")" in 0x0403*) ;; *) continue ;; esac
+        [ "$(pci_subsys "${d##*/}")" = "$subsys" ] && printf '%s\n' "${d##*/}"
+    done
+}
+
+CANDIDATES=()
+GPU_DEVS=()
+
+list_gpu_candidates() {
+    local dev grp strays drv seen=0
+    for dev in $(gpu_devices); do
+        if [ "$(pci_boot_vga "$dev")" = "1" ]; then
+            info "$dev  $(gpu_name "$dev") - boot GPU (drives this desktop), not offered"
+            continue
+        fi
+        seen=1
+        printf '  %s  %s\n' "$dev" "$(gpu_name "$dev")"
+        drv=$(pci_driver "$dev")
+        printf '    driver %s\n' "${drv:-none}"
+        grp=$(pci_group "$dev")
+        if [ -z "$grp" ]; then
+            printf '    ! no IOMMU group: the device is not behind an IOMMU, so it cannot be passed through\n'
+            continue
+        fi
+        strays=$(group_strays "$dev")
+        if [ -n "$strays" ]; then
+            printf '    ! cannot be passed through alone; its IOMMU group also holds:\n'
+            printf '%s\n' "$strays" | sed 's/^/      /'
+            continue
+        fi
+        printf '    alone in IOMMU group %s\n' "$(basename "$grp")"
+        CANDIDATES+=("$dev")
+    done
+    [ "$seen" = 1 ] || warn "no non-boot display controller found"
+}
+
+choose_gpu() {
+    local reply
+    list_gpu_candidates
+
+    case "$GPU_SPEC" in
+        none) return 0 ;;
+        auto)
+            if [ "${#CANDIDATES[@]}" -eq 0 ]; then
+                warn "--gpu auto, but no card is usable for passthrough"
+                return 0
+            fi
+            GPU_DEVS=("${CANDIDATES[0]}")
+            ;;
+        "")
+            [ "${#CANDIDATES[@]}" -gt 0 ] || return 0
+            printf '\n  Attach a GPU? [1-%d, 0 = none] ' "${#CANDIDATES[@]}"
+            read -rp "" reply
+            case "${reply:-0}" in
+                0|"") return 0 ;;
+                *[!0-9]*) warn "not a number; attaching nothing"; return 0 ;;
+            esac
+            [ "$reply" -ge 1 ] && [ "$reply" -le "${#CANDIDATES[@]}" ] || {
+                warn "out of range; attaching nothing"; return 0;
+            }
+            GPU_DEVS=("${CANDIDATES[$((reply - 1))]}")
+            ;;
+        *)
+            GPU_DEVS=("$GPU_SPEC")
+            ;;
+    esac
+
+    local gpu="${GPU_DEVS[0]}" audio
+    ok "attaching $gpu ($(gpu_name "$gpu"))"
+    while IFS= read -r audio; do
+        [ -n "$audio" ] || continue
+        GPU_DEVS+=("$audio")
+        info "and its audio function $audio"
+    done < <(gpu_audio_devices "$gpu")
+
+    local drv; drv=$(pci_driver "$gpu")
+    if [ "$drv" != "vfio-pci" ]; then
+        info "the card is on '$drv' now; libvirt detaches it from the host driver"
+        info "while the VM runs (managed hostdev) and gives it back on stop."
+        info "It must not be driving your desktop, which is why the boot GPU is"
+        info "never offered. 'ujust vypr-gpu-swap' is the alternative."
+    fi
+}
+
+# ------------------------------------------------------------- ISO staging
+# virt-install turns the ISO's directory into a libvirt storage pool and lists
+# every file in it. File names that are not valid UTF-8 (Shift-JIS leftovers,
+# typically) make that listing raise in libvirt's Python binding and take
+# virt-install down. Link the ISO into a clean directory when that is the case.
+stage_iso() {
+    local dir
+    dir=$(dirname "$(readlink -f "$ISO")")
+    if python3 - "$dir" <<'PY'
+import os, sys
+for name in os.listdir(sys.argv[1]):
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        sys.exit(1)
+sys.exit(0)
+PY
+    then
+        return 0
+    fi
+    warn "the ISO's directory holds file names that are not valid UTF-8;"
+    warn "virt-install builds a storage pool over it and crashes listing them."
+    local stage="${XDG_DATA_HOME:-$HOME/.local/share}/vypr/iso"
+    local staged
+    staged="$stage/$(basename "$ISO")"
+    mkdir -p "$stage"
+    if [ ! -e "$staged" ]; then
+        ln "$ISO" "$staged" 2>/dev/null || cp "$ISO" "$staged"
+    fi
+    ISO="$staged"
+    info "using the linked copy at $ISO"
+}
+
+# ------------------------------------------------------------- root steps
+ROOT_STEPS=()
+
+collect_root_steps() {
+    # Default storage pool: virt-install can create it, but on some versions it
+    # errors out instead. Cheap to make sure.
+    if ! virsh_out pool-info default >/dev/null 2>&1; then
+        ROOT_STEPS+=("mkdir -p /var/lib/libvirt/images; virsh pool-define-as default dir --target /var/lib/libvirt/images; virsh pool-autostart default; virsh pool-start default")
+    fi
+
+    # Default NAT network, plus the state directories and labels the image's
+    # /var wipe loses (see usr/lib/tmpfiles.d/10-vypr-libvirt.conf; this also
+    # heals a machine that already booted with the wrong labels).
+    if virsh_out net-info default >/dev/null 2>&1; then
+        ROOT_STEPS+=("systemctl enable --now virtnetworkd.socket 2>/dev/null || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
+    else
+        ROOT_STEPS+=("mkdir -p /var/lib/libvirt/dnsmasq /var/lib/libvirt/boot /var/lib/libvirt/filesystems /var/lib/libvirt/network; restorecon -R /var/lib/libvirt /var/cache/libvirt /var/log/libvirt 2>/dev/null || true; systemctl enable --now virtqemud.socket virtnetworkd.socket 2>/dev/null || true; systemctl restart virtnetworkd 2>/dev/null || true; virsh net-define /usr/share/libvirt/networks/default.xml >/dev/null 2>&1 || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
+    fi
+
+    # IOMMU, if the firmware exposes it but the kernel has not enabled it.
+    local groups
+    groups=$(ls -1 /sys/kernel/iommu_groups 2>/dev/null | wc -l)
+    if [ "$groups" -gt 1 ]; then
+        ok "IOMMU is on ($groups groups)"
+    elif [ -e /sys/firmware/acpi/tables/DMAR ] || [ -e /sys/firmware/acpi/tables/IVRS ]; then
+        local args="amd_iommu=on iommu=pt"
+        grep -qi "GenuineIntel" /proc/cpuinfo && args="intel_iommu=on iommu=pt"
+        warn "IOMMU is off; passthrough needs it after a reboot"
+        ROOT_STEPS+=("rpm-ostree kargs --append-if-missing=${args%% *} --append-if-missing=${args##* }")
+    else
+        warn "IOMMU is off and the firmware exposes no DMAR/IVRS table, so the"
+        warn "OS cannot turn it on (a hidden BIOS setting is the usual reason)."
+        warn "PCI passthrough - and with it Vypr - needs IOMMU."
+    fi
+}
+
+run_root_steps() {
+    [ "${#ROOT_STEPS[@]}" -gt 0 ] || return 0
+    head2 "Root-owned changes"
+    printf '  These need root:\n\n'
+    local step
+    for step in "${ROOT_STEPS[@]}"; do printf '    sudo bash -c %s\n' "'$step'"; done
+    printf '\n'
+    if [ "$DRY_RUN" = 1 ]; then
+        info "dry run: not running them"
+        return 0
+    fi
+    if [ "$ASSUME_YES" != "1" ]; then
+        local reply
+        read -rp "  Run them now with sudo? [Y/n] " reply
+        case "${reply:-y}" in
+            [Nn]*) warn "skipped - run the lines above by hand"; return 0 ;;
+        esac
+    fi
+    sudo -v || { bad "sudo refused; nothing was changed"; return 1; }
+    for step in "${ROOT_STEPS[@]}"; do
+        if sudo bash -c "$step"; then ok "done"; else bad "failed: $step"; fi
+    done
+    case " ${ROOT_STEPS[*]} " in
+        *rpm-ostree*)
+            warn "the IOMMU kernel argument applies after a reboot - reboot"
+            warn "before starting the VM with a passed-through GPU."
+            ;;
+    esac
+    return 0
+}
+
+# ----------------------------------------------------------------------- main
+
+main() {
+    head2 "Checking what the VM needs"
+    local missing=0
+    for cmd in virt-install virsh python3 lspci; do
+        have "$cmd" || { bad "$cmd is missing - update to the latest-vypr image"; missing=1; }
+    done
+    [ -r "$ISO" ] || { bad "no such ISO: $ISO"; missing=1; }
+    [ -x /usr/bin/swtpm ] || { bad "swtpm is missing - update to the latest-vypr image"; missing=1; }
+    [ "$missing" -eq 0 ] || exit 1
+    ok "tools and ISO are present"
+
+    if virsh_out dominfo "$NAME" >/dev/null 2>&1; then
+        bad "a domain named '$NAME' already exists - pick another name"
+        exit 1
+    fi
+    ok "the name '$NAME' is free"
+
+    # Secure Boot needs the secboot firmware and SMM; without it Windows 11
+    # still installs, with a complaint.
+    local boot="uefi,loader.secure=yes"
+    local -a feature_opts=(--features smm.state=on)
+    if [ ! -e /usr/share/edk2/ovmf/OVMF_CODE.secboot.fd ]; then
+        warn "secure-boot OVMF is missing; using plain UEFI (Windows 11 will"
+        warn "complain about Secure Boot during setup)"
+        boot="uefi"
+        feature_opts=()
+    fi
+
+    collect_root_steps
+    run_root_steps || true
+
+    head2 "Graphics cards"
+    choose_gpu
+    if [ "${#GPU_DEVS[@]}" -eq 0 ]; then
+        warn "no GPU will be attached, so Vypr will have no frames to show."
+        warn "Add one later in virt-manager (Add Hardware > PCI Host Device)."
+    fi
+
+    stage_iso
+
+    local disk_arg="size=$DISK,format=qcow2,bus=sata"
+    local tpm_arg="backend.type=emulator,backend.version=2.0"
+    local -a cmd=(virt-install
+        --name "$NAME"
+        --osinfo win11
+        --memory "$MEMORY"
+        --vcpus "$VCPUS"
+        --cpu host-passthrough
+        --machine q35
+        --boot "$boot"
+        --tpm "$tpm_arg"
+        --disk "$disk_arg"
+        --cdrom "$ISO"
+        --network "network=default,model=e1000e"
+        --graphics "spice,listen=none"
+        --video qxl
+        --noautoconsole)
+    if [ "${#feature_opts[@]}" -gt 0 ]; then
+        cmd+=("${feature_opts[@]}")
+    fi
+    local d
+    if [ "${#GPU_DEVS[@]}" -gt 0 ]; then
+        for d in "${GPU_DEVS[@]}"; do cmd+=(--hostdev "$d"); done
+    fi
+
+    head2 "Creating '$NAME'"
+    printf '  '
+    printf '%q ' "${cmd[@]}"
+    printf '\n\n'
+    if [ "$DRY_RUN" = 1 ]; then
+        info "dry run: nothing was created"
+        return 0
+    fi
+    if ! "${cmd[@]}"; then
+        bad "virt-install failed. If the domain was defined anyway it stays:"
+        info "  virsh list --all"
+        info "  virsh start '$NAME'"
+        exit 1
+    fi
+
+    head2 "Next"
+    cat <<EOF
+  '$NAME' is created and the Windows installer is running.
+
+  1. Finish the Windows installation in the console:
+
+       virt-manager --show-domain-console '$NAME'
+
+  2. When Windows is up, configure it for Vypr and prepare the guest half:
+
+       ujust vypr-setup
+       ujust vypr-guest-exe
+
+  3. Run vypr-setup.exe inside Windows, paste the key, restart Windows, then:
+
+       ujust vypr-detect
+
+  The VM was created for Vypr: no USB tablet is added (the mouse stays
+  relative), and the disk/NIC need no extra drivers. 'ujust vypr-setup' later
+  adds shared memory, removes a tablet if virt-manager added one, and sets up
+  the sound card and the folder share.
+
+EOF
+}
+
+main

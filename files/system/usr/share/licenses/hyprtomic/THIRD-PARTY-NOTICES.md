@@ -17,6 +17,7 @@ and shipped as packages or binaries; all rights remain with the upstream authors
 |---|---|---|
 | [Keyitdev/sddm-astronaut-theme](https://github.com/Keyitdev/sddm-astronaut-theme) | GPL-3.0 | SDDM login theme |
 | ghostty (copr `scottames/ghostty`) | per upstream | host terminal |
+| [Amzi-01/Vypr](https://github.com/Amzi-01/Vypr) | Unlicense | Windows-VM windows as native ones; host binaries are built from the v0.5.0 source and the release's `vypr-setup.exe` is shipped as-is (`latest-vypr` image only) |
 | [ry2x/HyprBind](https://github.com/ry2x/HyprBind) | MIT | keybind list app (GUI container) |
 | [oneroa/hypr-emoji-picker](https://github.com/oneroa/hypr-emoji-picker) (AUR `hypremoji`) | MIT | emoji picker (GUI container) |
 | mozkey-ibg-bin (AUR) | per upstream | Japanese IME engine (GUI container) |

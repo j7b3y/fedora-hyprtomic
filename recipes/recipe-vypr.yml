@@ -1,0 +1,94 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+# Vypr variant of the host image: same HyprTomic desktop plus the Vypr host
+# binaries and the libvirt/QEMU stack they need to show Windows-VM windows as
+# native ones (https://github.com/Amzi-01/Vypr).
+#
+# Published as ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr. `alt-tags` replaces
+# the default latest/timestamp tags, so the two variants are separate tags of
+# the same repository and a plain `rpm-ostree upgrade` can never swap one for
+# the other by accident.
+name: fedora-hyprtomic
+description: HyprTomic with Vypr - per-application native windows from a Windows VM (libvirt + passed-through GPU)
+
+base-image: ghcr.io/wayblueorg/hyprland
+image-version: latest
+
+alt-tags:
+  - latest-vypr
+
+# The Vypr host binaries are compiled in a build stage and copied into the
+# final image, so the toolchain and the -devel packages never ship.
+stages:
+  - name: vypr
+    # Keep in sync with the wayblue base: a stage newer than the final image
+    # could link against a newer glibc than the image has. (wayblue latest
+    # tracks the current Fedora stable, i.e. Fedora 44 as of 2026-10.)
+    from: docker.io/library/fedora:44
+    modules:
+      - type: script
+        scripts:
+          - vypr-build.sh
+
+modules:
+  - from-file: recipe-common-packages.yml
+
+  # Vypr runtime: SDL3 for its windows, Vulkan for the zero-copy presenter,
+  # and the libvirt/QEMU/virtiofsd stack it drives. virt-manager/virt-install
+  # are here because the VM side (create/configure the Windows guest) is part
+  # of the same workflow; virsh comes with libvirt-client.
+  - type: dnf
+    install:
+      skip-unavailable: true
+      packages:
+        - SDL3
+        - vulkan-loader
+        - mesa-vulkan-drivers
+        - libvirt-daemon-kvm
+        - libvirt-client
+        - libvirt-daemon-config-network
+        - virtiofsd
+        - virt-manager
+        - virt-install
+        - swtpm
+        - edk2-ovmf
+        - python3-libvirt
+        - qemu-audio-pa # the emulated sound card in the VM speaks PulseAudio
+        - openssh-clients # vypr drives the guest over SSH (ssh/scp/ssh-keygen)
+        - pciutils # lspci: GPU/IOMMU checks in vypr doctor and the setup
+        - desktop-file-utils # update-desktop-database for the app entries
+        - xdg-utils # xdg-mime for `vypr associate`
+        - xdg-user-dirs # xdg-user-dir for the desktop shortcut option
+
+  # Binaries and assets built in the stage above.
+  - type: copy
+    from: vypr
+    src: /out/usr/bin/
+    dest: /usr/bin/
+  - type: copy
+    from: vypr
+    src: /out/usr/share/vypr/
+    dest: /usr/share/vypr/
+  - type: copy
+    from: vypr
+    src: /out/usr/share/licenses/vypr/
+    dest: /usr/share/licenses/vypr/
+  - type: copy
+    from: vypr
+    src: /out/usr/share/icons/hicolor/256x256/apps/vypr.png
+    dest: /usr/share/icons/hicolor/256x256/apps/
+
+  - from-file: recipe-common-dotfiles.yml
+
+  # Vypr-only system files: /usr/bin/hyprtomic-vypr-setup (VM + guest setup)
+  # and the ujust fragment, which vypr-finalize.sh folds into 60-custom.just
+  # (ublue's justfile imports only that file).
+  - type: files
+    files:
+      - source: vypr
+        destination: /
+  - type: script
+    scripts:
+      - vypr-finalize.sh
+
+  - type: signing

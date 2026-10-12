@@ -515,6 +515,21 @@ hl.window_rule({
     float = true,
 })
 
+-- Vypr (latest-vypr image): one window per application streamed from a
+-- Windows VM, with app_id/class "vypr-<app>". They float: the guest owns the
+-- window's size and Vypr negotiates resizes with it, and games are run
+-- windowed too, so tiling would only fight that negotiation. idle_inhibit
+-- keeps the screen on while a streamed game has focus, and blur behind an
+-- opaque video stream is wasted work. Inert on the base (latest) image.
+hl.window_rule({
+    name         = "float-vypr",
+    match        = { class = "^(vypr-.*)$" },
+    float        = true,
+    center       = true,
+    idle_inhibit = "focus",
+    no_blur      = true,
+})
+
 -- Layer rules
 hl.layer_rule({ name = "powermenu",          match = { namespace = "quickshell:powermenu" },      blur = false, ignore_alpha = 0.5 })
 hl.layer_rule({ name = "controlcenter",      match = { namespace = "quickshell:controlcenter" },  blur = true,  ignore_alpha = 0.5 })

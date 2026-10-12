@@ -1,0 +1,569 @@
+#!/usr/bin/env bash
+# hyprtomic-vypr-setup - configure an existing libvirt VM for Vypr.
+#
+# The latest-vypr image already ships the Vypr host binaries (/usr/bin/vypr,
+# vyprd, vypr-window), so this is the machine-side half of upstream's
+# install/install.sh, made for an atomic system:
+#
+#   - pick a libvirt domain and make it Vypr-shaped: shared memfd RAM (frames
+#     are read out of the guest's memory), no USB tablet (absolute input breaks
+#     raw-input games), topoext, an emulated sound card, and an optional
+#     virtiofs share of a host folder,
+#   - check qemu.conf (QEMU must run as the user/group so /proc/<qemu>/fd is
+#     readable), the libvirt group, the default network and IOMMU kargs, and
+#     offer to apply the root-owned changes (sudo, after confirmation),
+#   - create the host -> guest SSH key and ~/.config/vypr/config; an existing
+#     config is never rewritten, only missing keys are appended,
+#   - print the guest-side steps (vypr-setup.exe + the public key to paste).
+#
+# Everything is idempotent. `--guest-exe` is the guest-half helper on its own:
+# copy the installer to ~/Downloads and print the public key.
+#
+# Usage:
+#   hyprtomic-vypr-setup [--domain NAME] [--guest-user USER] [--guest-ip IP]
+#                        [--yes] [--guest-exe]
+set -uo pipefail
+
+USER_NAME="$(id -un)"
+USER_GROUP="$(id -gn)"
+KEY="$HOME/.ssh/vypr-guest"
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vypr"
+CONF="$CONF_DIR/config"
+export LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
+PORT=47820
+
+DOMAIN_ARG=""
+GUEST_USER_ARG=""
+GUEST_IP_ARG=""
+ASSUME_YES=0
+GUEST_EXE_ONLY=0
+# Scratch dir for the domain XML; global on purpose: the EXIT trap below runs
+# after main() returned, where a `local` would already be out of scope.
+tmp=""
+
+bold=$(tput bold 2>/dev/null || true); dim=$(tput dim 2>/dev/null || true)
+red=$(tput setaf 1 2>/dev/null || true); grn=$(tput setaf 2 2>/dev/null || true)
+ylw=$(tput setaf 3 2>/dev/null || true); rst=$(tput sgr0 2>/dev/null || true)
+ok()   { printf '  %s✓%s %s\n' "$grn" "$rst" "$*"; }
+warn() { printf '  %s!%s %s\n' "$ylw" "$rst" "$*"; }
+bad()  { printf '  %s✗%s %s\n' "$red" "$rst" "$*"; }
+info() { printf '  %s·%s %s\n' "$dim" "$rst" "$*"; }
+head2(){ printf '\n%s%s%s\n' "$bold" "$*" "$rst"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --domain)     DOMAIN_ARG="${2:-}"; shift 2 ;;
+        --guest-user) GUEST_USER_ARG="${2:-}"; shift 2 ;;
+        --guest-ip)   GUEST_IP_ARG="${2:-}"; shift 2 ;;
+        --yes)        ASSUME_YES=1; shift ;;
+        --guest-exe)  GUEST_EXE_ONLY=1; shift ;;
+        -h|--help)    usage; exit 0 ;;
+        *) echo "hyprtomic-vypr-setup: unknown option: $1" >&2; usage; exit 2 ;;
+    esac
+done
+
+# ---------------------------------------------------------------- virsh, safely
+#
+# virsh works as the user once they are in the libvirt group; before that it
+# needs root, and the group only takes effect at the next login. Everything
+# here therefore falls back to `sudo virsh`, so the setup can run in one go.
+virsh_do() {
+    local out rc
+    out=$(virsh "$@" 2>&1); rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    if have sudo; then
+        out=$(sudo virsh "$@" 2>&1); rc=$?
+        [ "$rc" -eq 0 ] && return 0
+    fi
+    printf '%s\n' "$out" >&2
+    return "$rc"
+}
+
+virsh_out() { # stdout only; falls back to sudo, hides errors
+    local out
+    out=$(virsh "$@" 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
+    if have sudo; then
+        out=$(sudo virsh "$@" 2>/dev/null) && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
+    fi
+    return 1
+}
+
+qemu_conf() {
+    grep -sE "^[[:space:]]*$1[[:space:]]*=" /etc/libvirt/qemu.conf 2>/dev/null | tail -1 |
+        sed -E 's/^[^=]*=[[:space:]]*"?([^"]*)"?.*/\1/'
+}
+
+share_root() { # virtiofs share configured for the domain, if any
+    virsh_out dumpxml --inactive "$1" 2>/dev/null | python3 -c '
+import sys, xml.etree.ElementTree as ET
+try:
+    root = ET.fromstring(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+for fs in root.iter("filesystem"):
+    t = fs.find("target")
+    if t is not None and t.get("dir") == "vyprhome":
+        s = fs.find("source")
+        if s is not None and s.get("dir"):
+            print(s.get("dir"))
+            break
+' 2>/dev/null
+}
+
+# ------------------------------------------------------------- SSH key + config
+
+ensure_key() {
+    if [ ! -f "$KEY" ]; then
+        install -d -m700 "$HOME/.ssh"
+        ssh-keygen -t ed25519 -f "$KEY" -N "" -C "vypr (host -> guest)" >/dev/null 2>&1 \
+            && ok "created the host -> guest keypair at $KEY" \
+            || bad "could not create $KEY"
+    else
+        ok "the host -> guest keypair already exists"
+    fi
+    chmod 600 "$KEY" 2>/dev/null || true
+    chmod 644 "$KEY.pub" 2>/dev/null || true
+}
+
+add_missing() { # append KEY="value" only when KEY is not in the config at all
+    local key="$1" value="$2"
+    if ! grep -qE "^[[:space:]]*${key}=" "$CONF" 2>/dev/null; then
+        printf '%s="%s"\n' "$key" "$value" >> "$CONF"
+        info "added ${key}=\"${value}\" to $CONF"
+    fi
+}
+
+# --------------------------------------------------------------- guest exe mode
+
+guest_exe_mode() {
+    local src=/usr/share/vypr/vypr-setup.exe
+    [ -f "$src" ] || { bad "$src is missing - is this the latest-vypr image?"; exit 1; }
+
+    local dest_dir
+    dest_dir=$(xdg-user-dir DOWNLOAD 2>/dev/null) || dest_dir=""
+    [ -n "$dest_dir" ] || dest_dir="$HOME/Downloads"
+    install -Dm644 "$src" "$dest_dir/vypr-setup.exe" \
+        && ok "vypr-setup.exe copied to $dest_dir/vypr-setup.exe" \
+        || { bad "could not write to $dest_dir"; exit 1; }
+
+    ensure_key
+
+    head2 "Guest setup (run inside Windows)"
+    printf '  1. Copy %s into the VM.\n' "$dest_dir/vypr-setup.exe"
+    local root
+    root=$(share_root "${DOMAIN_ARG:-${DOMAIN:-}}" 2>/dev/null)
+    if [ -n "$root" ]; then
+        printf '     The virtiofs share (%s) is a drive in Windows once the\n' "$root"
+        printf '     installer has run with its "home folder" box ticked.\n'
+    else
+        printf '     (No virtiofs share configured; use whatever transfer you have.)\n'
+    fi
+    printf '  2. Run it and paste this public key into the installer:\n\n'
+    sed 's/^/       /' "$KEY.pub"
+    printf '\n  3. Tick what you need, run it, and restart Windows when it finishes.\n'
+    printf '  4. Back on Linux: `ujust vypr-detect` (starts the VM) or `vypr add ...`.\n'
+}
+
+# --------------------------------------------------------------------- domain
+
+choose_domain() {
+    local -a domains=()
+    mapfile -t domains < <(virsh_out list --all --name 2>/dev/null | grep -v '^$')
+    if [ "${#domains[@]}" -eq 0 ]; then
+        bad "no libvirt domains found. Create your Windows VM first (virt-manager);"
+        bad "Vypr configures an existing VM, it does not build one."
+        exit 1
+    fi
+
+    if [ -n "$DOMAIN_ARG" ]; then
+        DOMAIN="$DOMAIN_ARG"
+    elif [ -n "${DOMAIN:-}" ]; then
+        :
+    elif [ "${#domains[@]}" -eq 1 ]; then
+        DOMAIN="${domains[0]}"
+        info "only one domain exists, using '$DOMAIN'"
+    else
+        printf '  Which VM runs Windows?\n'
+        local i=1
+        for d in "${domains[@]}"; do printf '    %d) %s\n' "$i" "$d"; i=$((i + 1)); done
+        local reply
+        read -rp "  Number [$i-1] " reply
+        [ -n "$reply" ] || reply=1
+        case "$reply" in
+            *[!0-9]*|"") bad "not a number"; exit 1 ;;
+        esac
+        [ "$reply" -ge 1 ] && [ "$reply" -le "${#domains[@]}" ] || { bad "out of range"; exit 1; }
+        DOMAIN="${domains[$((reply - 1))]}"
+    fi
+
+    virsh_out list --all --name | grep -qx "$DOMAIN" || {
+        bad "'$DOMAIN' is not a libvirt domain"; exit 1;
+    }
+    ok "configuring '$DOMAIN'"
+
+    local state
+    state=$(virsh_out domstate "$DOMAIN" 2>/dev/null || echo missing)
+    if [ "$state" = "running" ]; then
+        warn "'$DOMAIN' is running. Device changes are written to the persistent"
+        warn "config and take effect at the next boot."
+    fi
+}
+
+# ------------------------------------------------------------------ root steps
+
+ROOT_STEPS=()
+
+collect_root_steps() {
+    # libvirt group: virsh as the user needs it (polkit allows the group).
+    if id -nG "$USER_NAME" | grep -qw libvirt; then
+        ok "$USER_NAME is in the 'libvirt' group"
+    elif getent group libvirt >/dev/null 2>&1; then
+        ROOT_STEPS+=("usermod -aG libvirt '$USER_NAME'")
+    fi
+
+    # QEMU under this user/group: without it /proc/<qemu>/fd is unreadable and
+    # no frame can be read out of the VM.
+    local quser qgroup
+    quser=$(qemu_conf user); qgroup=$(qemu_conf group)
+    if [ "$quser" = "$USER_NAME" ] && [ "$qgroup" = "$USER_GROUP" ]; then
+        ok "qemu.conf already runs QEMU as $USER_NAME:$USER_GROUP"
+    else
+        ROOT_STEPS+=("[ -f /etc/libvirt/qemu.conf.hyprtomic-vypr.bak ] || cp -a /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.hyprtomic-vypr.bak; sed -i 's|^#\\?user = .*|user = \"$USER_NAME\"|' /etc/libvirt/qemu.conf; sed -i 's|^#\\?group = .*|group = \"$USER_GROUP\"|' /etc/libvirt/qemu.conf; systemctl restart virtqemud 2>/dev/null || true")
+    fi
+
+    # Modular libvirt daemons + the default NAT network.
+    ROOT_STEPS+=("systemctl enable --now virtqemud.socket virtnetworkd.socket 2>/dev/null || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
+
+    # IOMMU: passthrough needs it, and it is a kargs change on atomic hosts.
+    local groups
+    groups=$(ls -1 /sys/kernel/iommu_groups 2>/dev/null | wc -l)
+    if [ "$groups" -gt 1 ]; then
+        ok "IOMMU is on ($groups groups)"
+    else
+        local args="amd_iommu=on iommu=pt"
+        grep -qi "GenuineIntel" /proc/cpuinfo && args="intel_iommu=on iommu=pt"
+        warn "IOMMU is off; passthrough needs it after a reboot"
+        ROOT_STEPS+=("rpm-ostree kargs --append-if-missing=${args%% *} --append-if-missing=${args##* }")
+    fi
+
+    # Firewall: firewalld trusts the libvirt zone (virbr0) by default. ufw does
+    # not, so add the one rule only when ufw is the active firewall.
+    if systemctl is-active --quiet ufw 2>/dev/null; then
+        ROOT_STEPS+=("ufw allow in on virbr0 to any port $PORT proto tcp")
+    fi
+}
+
+run_root_steps() {
+    [ "${#ROOT_STEPS[@]}" -gt 0 ] || { ok "no root-owned changes needed"; return 0; }
+
+    head2 "Root-owned changes"
+    printf '  These need root:\n\n'
+    local step
+    for step in "${ROOT_STEPS[@]}"; do printf '    sudo bash -c %s\n' "'$step'"; done
+    printf '\n'
+
+    if [ "$ASSUME_YES" != "1" ]; then
+        local reply
+        read -rp "  Run them now with sudo? [Y/n] " reply
+        case "${reply:-y}" in
+            [Nn]*) warn "skipped - run the lines above by hand, then re-run this"; return 0 ;;
+        esac
+    fi
+
+    sudo -v || { bad "sudo refused; nothing was changed"; return 1; }
+    local failed=0
+    for step in "${ROOT_STEPS[@]}"; do
+        if sudo bash -c "$step"; then ok "done"; else bad "failed: $step"; failed=1; fi
+    done
+
+    if ! id -nG "$USER_NAME" | grep -qw libvirt; then
+        warn "the libvirt group applies at your next login; until then this script"
+        warn "uses 'sudo virsh'. Log out and back in before running 'vypr'."
+    fi
+    case " ${ROOT_STEPS[*]} " in
+        *rpm-ostree*) warn "the IOMMU kernel argument applies after a reboot." ;;
+    esac
+    return "$failed"
+}
+
+# ----------------------------------------------------------------------- main
+
+main() {
+    head2 "Checking what Vypr needs"
+    local missing=0
+    for cmd in virsh python3 ssh-keygen install; do
+        have "$cmd" || { bad "$cmd is missing - update to the latest-vypr image"; missing=1; }
+    done
+    [ -x /usr/bin/vypr ] || { bad "/usr/bin/vypr is missing - is this the latest-vypr image?"; missing=1; }
+    [ "$missing" -eq 0 ] || exit 1
+    ok "Vypr host binaries and libvirt tools are present"
+
+    choose_domain
+
+    local dom_xml
+    dom_xml=$(virsh_out dumpxml --inactive "$DOMAIN" 2>/dev/null) || dom_xml=""
+    if [ -z "$dom_xml" ]; then
+        bad "could not read the XML of '$DOMAIN'"
+        exit 1
+    fi
+
+    # The share question, before the XML edit so both changes land together.
+    local share_dir=""
+    local existing_share
+    existing_share=$(share_root "$DOMAIN")
+    if [ -n "$existing_share" ]; then
+        ok "already sharing $existing_share with the VM (virtiofs)"
+    elif ! have virtiofsd && [ ! -x /usr/libexec/virtiofsd ] && [ ! -x /usr/lib/virtiofsd ]; then
+        warn "virtiofsd is missing, so a folder share cannot be served; skipping"
+    else
+        printf '\n  A folder from this machine can appear in Windows as a drive.\n'
+        printf '  Anything it can reach, the VM can read and write.\n\n'
+        local reply
+        read -rp "  Share a folder? [y/N] " reply
+        case "${reply:-n}" in
+            [Yy]*)
+                read -rp "  Which folder [$HOME]: " reply
+                share_dir="${reply:-$HOME}"
+                if [ ! -d "$share_dir" ]; then
+                    bad "$share_dir is not a directory; skipping the share"
+                    share_dir=""
+                fi
+                ;;
+        esac
+    fi
+
+    local audio_socket=""
+    if [ -S "/run/user/$(id -u)/pulse/native" ]; then
+        audio_socket="/run/user/$(id -u)/pulse/native"
+    else
+        warn "no PulseAudio socket at /run/user/$(id -u)/pulse/native; skipping VM audio"
+    fi
+
+    head2 "Configuring $DOMAIN"
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    printf '%s' "$dom_xml" > "$tmp/domain.xml"
+    cp "$tmp/domain.xml" "$tmp/domain.bak.xml"
+
+    local changes
+    changes=$(python3 - "$tmp/domain.xml" "$share_dir" "$audio_socket" <<'PY'
+import sys, xml.etree.ElementTree as ET
+
+path, share, audio_socket = sys.argv[1], sys.argv[2], sys.argv[3]
+
+# Passthrough domains routinely carry a <qemu:commandline> block. Without
+# registering the prefixes ElementTree would rewrite them as ns0: and libvirt
+# would no longer recognise it, so register libvirt's namespaces first.
+for prefix, uri in (
+    ("qemu", "http://libvirt.org/schemas/domain/qemu/1.0"),
+    ("lxc", "http://libvirt.org/schemas/domain/lxc/1.0"),
+    ("libosinfo", "http://libosinfo.org/xmlns/libvirt/domain/1.0"),
+):
+    ET.register_namespace(prefix, uri)
+
+tree = ET.parse(path); root = tree.getroot(); dev = root.find("devices")
+changed, notes = [], []
+
+# An old IVSHMEM device (pre-0.5 Vypr) only holds 512 MiB of host RAM now.
+for sh in list(dev.findall("shmem")):
+    if sh.get("name") == "vypr":
+        dev.remove(sh)
+        changed.append("removed the old 'vypr' shared-memory device, no longer needed")
+
+# Frames are read straight out of guest RAM, which QEMU only exposes when the
+# RAM is a shared memory file. virtiofs needs the same thing.
+mb = root.find("memoryBacking")
+if mb is None:
+    mb = ET.Element("memoryBacking")
+    anchor = root.find("currentMemory") if root.find("currentMemory") is not None else root.find("memory")
+    root.insert(list(root).index(anchor) + 1 if anchor is not None else 0, mb)
+if mb.find("source") is None and mb.find("hugepages") is None:
+    ET.SubElement(mb, "source").set("type", "memfd")
+    changed.append("gave the VM memfd memory, so the host can read its frames")
+acc = mb.find("access")
+if acc is None:
+    acc = ET.SubElement(mb, "access")
+if acc.get("mode") != "shared":
+    acc.set("mode", "shared")
+    changed.append("shared the VM's memory with the host")
+
+# An absolute pointing device breaks raw-input games whoever sends input.
+for inp in list(dev.findall("input")):
+    if inp.get("type") == "tablet":
+        dev.remove(inp)
+        changed.append("removed the USB tablet, which breaks the mouse in games")
+
+cpu = root.find("cpu")
+if cpu is not None and not any(f.get("name") == "topoext" for f in cpu.findall("feature")):
+    f = ET.SubElement(cpu, "feature"); f.set("policy", "require"); f.set("name", "topoext")
+    changed.append("required the topoext CPU feature, so the guest can see SMT")
+
+if audio_socket:
+    if dev.find("sound") is None:
+        ET.SubElement(dev, "sound").set("model", "ich9")
+        changed.append("added an emulated sound card (Vypr Microphone/Speakers in Windows)")
+    audio = dev.find("audio")
+    if audio is None:
+        audio = ET.SubElement(dev, "audio")
+        audio.set("id", "1"); audio.set("type", "pulseaudio"); audio.set("serverName", audio_socket)
+        changed.append("routed VM audio through PulseAudio (PipeWire)")
+    elif audio.get("type") != "pulseaudio":
+        notes.append("the VM already has a '%s' audio backend; leaving it alone" % audio.get("type"))
+
+if share:
+    exists = False
+    for fs in dev.findall("filesystem"):
+        t = fs.find("target")
+        if t is not None and t.get("dir") == "vyprhome":
+            exists = True
+    if not exists:
+        fs = ET.SubElement(dev, "filesystem")
+        fs.set("type", "mount"); fs.set("accessmode", "passthrough")
+        ET.SubElement(fs, "driver").set("type", "virtiofs")
+        ET.SubElement(fs, "source").set("dir", share)
+        ET.SubElement(fs, "target").set("dir", "vyprhome")
+        changed.append("shared %s with the VM over virtiofs" % share)
+
+ET.indent(tree, space="  ")
+tree.write(path, encoding="unicode")
+
+for line in changed:
+    print("change\t" + line)
+for line in notes:
+    print("note\t" + line)
+PY
+)
+
+    local changed=0 kind line
+    while IFS=$'\t' read -r kind line; do
+        [ -n "${line:-}" ] || continue
+        case "$kind" in
+            change) ok "$line"; changed=1 ;;
+            note)   warn "$line" ;;
+        esac
+    done <<< "$changes"
+
+    if [ "$changed" = "1" ]; then
+        local backup="$HOME/.local/share/vypr/domain-before-install.xml"
+        if [ -f "$backup" ]; then
+            info "keeping the first backup at $backup"
+        else
+            install -Dm600 "$tmp/domain.bak.xml" "$backup" 2>/dev/null \
+                && info "the original domain is saved at $backup"
+        fi
+        if virsh_do define "$tmp/domain.xml"; then
+            ok "domain updated; it takes effect at the VM's next boot"
+        else
+            bad "could not redefine the domain; it is unchanged"
+        fi
+    else
+        ok "the domain already has everything it needs"
+    fi
+
+    collect_root_steps
+    run_root_steps || true
+
+    head2 "Guest access"
+    ensure_key
+
+    head2 "Session configuration"
+    mkdir -p "$CONF_DIR/apps"
+    local guest_ip="$GUEST_IP_ARG"
+    if [ -z "$guest_ip" ]; then
+        guest_ip=$(virsh_out domifaddr "$DOMAIN" 2>/dev/null |
+                   awk '/ipv4/ { split($4, a, "/"); print a[1]; exit }')
+    fi
+    [ -n "$guest_ip" ] || guest_ip="auto"
+
+    local guest_user="$GUEST_USER_ARG"
+    if [ -f "$CONF" ]; then
+        # shellcheck source=/dev/null
+        . "$CONF" 2>/dev/null || true
+        ok "keeping the existing $CONF (missing keys are appended, nothing is rewritten)"
+    fi
+    [ -n "$guest_user" ] || guest_user="${GUEST_USER:-}"
+    if [ -z "$guest_user" ]; then
+        read -rp "  Windows username [$USER_NAME]: " guest_user
+        guest_user="${guest_user:-$USER_NAME}"
+    fi
+
+    if [ ! -f "$CONF" ]; then
+        cat > "$CONF" <<EOF
+# Written by hyprtomic-vypr-setup on $(date +%Y-%m-%d).
+#
+# This file lives in \$HOME: image updates never touch it, and
+# hyprtomic-vypr-setup only appends keys that are missing, never rewrites it.
+#
+# Quoted, because a libvirt domain may be named anything a person can type.
+VM="$DOMAIN"
+# The guest's address, or "auto" to ask libvirt each time.
+GUEST="$guest_ip"
+# The Windows username Vypr drives over SSH.
+GUEST_USER="$guest_user"
+
+# Parsec is started alongside the session because its driver is what makes the
+# mouse work in games that read raw input. Set to 0 if you do not play those.
+USE_PARSEC=1
+
+# Let the VM grant administrator rights without a prompt. Windows draws that
+# prompt where Vypr cannot show or answer it, so with this off an installer
+# that asks for approval just hangs. It does lower the VM's security.
+OPEN_ELEVATION=1
+
+# Shut the VM down once the last streamed window has been gone this long.
+# Relaunching anything during the countdown cancels it. 0 leaves it running.
+SHUTDOWN_VM_ON_EXIT=1
+SHUTDOWN_GRACE=60
+EOF
+        ok "wrote $CONF"
+    else
+        add_missing VM "$DOMAIN"
+        if [ -n "$GUEST_IP_ARG" ]; then
+            add_missing GUEST "$GUEST_IP_ARG"
+        elif [ -z "${GUEST:-}" ]; then
+            add_missing GUEST "$guest_ip"
+        fi
+        add_missing GUEST_USER "$guest_user"
+        add_missing USE_PARSEC 1
+        add_missing OPEN_ELEVATION 1
+        add_missing SHUTDOWN_VM_ON_EXIT 1
+        add_missing SHUTDOWN_GRACE 60
+    fi
+
+    head2 "Next"
+    cat <<EOF
+  Vypr is configured for '$DOMAIN'. The guest half is one installer you run
+  inside Windows:
+
+    1. ujust vypr-guest-exe      # copies vypr-setup.exe to ~/Downloads
+    2. Copy it into the VM and run it; paste the public key it prints.
+    3. Restart Windows afterwards (the installer says so too).
+    4. Back here, find apps and register them:
+
+         ujust vypr-detect        # starts the VM, lists the guest's shortcuts
+         vypr add <app> 'C:\\...'  # or one at a time
+
+  Then launch a registered app like any other: from the launcher (they appear
+  in the $USER_NAME container's source), or 'vypr run <app>'.
+
+  Re-run this script any time - it only adds what is missing:
+  'ujust vypr-setup'. Health check: 'ujust vypr-doctor'.
+
+EOF
+
+    if [ -n "$existing_share" ] || [ -n "$share_dir" ]; then
+        info "The virtiofs share needs WinFsp in the guest; the installer's"
+        info "'home folder' box sets it up. It appears as a drive after a reboot."
+    fi
+}
+
+if [ "$GUEST_EXE_ONLY" = "1" ]; then
+    guest_exe_mode
+else
+    main
+fi

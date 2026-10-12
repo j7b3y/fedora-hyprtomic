@@ -1,0 +1,46 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/module-list-v1.json
+# Shared host-image dotfiles/services layer (used by recipe.yml and
+# recipe-vypr.yml). Kept after the package layer so dotfile edits do not
+# invalidate the slow dnf layer.
+modules:
+  # Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  # Build-time scripts (live in files/scripts/; reference by bare filename).
+  # GUI container scripts (gui-*.sh) build in gui.yml, and the Vypr build
+  # scripts (vypr-*.sh) in recipe-vypr.yml.
+  - type: script
+    scripts:
+      - install-ghostty.sh
+      - install-sddm-theme.sh
+      - finalize.sh
+
+  # Enable firstboot/session services (user groups, zsh default; user units:
+  # the ydotool daemon, mirroring upstream, plus distrobox app registration
+  # for the launcher). The hostname is not managed here: the installer's
+  # name (or `hostnamectl set-hostname`) is used and persists in /etc
+  # (see README, "ホスト名").
+  - type: systemd
+    system:
+      enabled:
+        - hyprtomic-groups.service
+        - hyprtomic-zsh-default.service
+    user:
+      enabled:
+        - ydotool.service
+        - hyprtomic-distrobox-apps.service
+
+  # Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  - type: default-flatpaks
+    configurations:
+      - notify: true
+        scope: system
+        install:
+          - org.mozilla.firefox
+          - org.gnome.Loupe
+          - com.bitwarden.desktop
+          - io.missioncenter.MissionCenter # Super+M system monitor

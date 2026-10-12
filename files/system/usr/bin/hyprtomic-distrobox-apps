@@ -455,6 +455,77 @@ prune_stale_cover_art() {
     done
 }
 
+# ------------------------------------------------------------------ host apps
+#
+# The launcher runs inside the GUI container, where the host's
+# /usr/share/applications is not on XDG_DATA_DIRS. Register the host's visible
+# entries into the shared home instead: the file keeps its host-native Exec
+# (so it works wherever the host reads it), is named host-<id>.desktop and is
+# marked, and the launcher recognises both -- it lists those under the Host
+# chip and runs them through distrobox-host-exec. When the GUI container (or a
+# flatpak) provides the same application, its variant wins: the launcher drops
+# host-X when X exists. Only marked files are ever pruned.
+HOST_MARKER="X-HyprTomic-Host=1"
+HOST_APPS_DIRS="/usr/share/applications /usr/local/share/applications"
+
+# Would this host entry be shown and runnable in this session? No
+# NoDisplay/Hidden/Link, OnlyShowIn/NotShowIn must allow Hyprland, and the
+# first Exec binary must exist on the host (a dead entry helps no one).
+host_app_ok() {
+    local f="$1" first only notshow
+    grep -q "^NoDisplay=true" "$f" 2>/dev/null && return 1
+    grep -q "^Hidden=true" "$f" 2>/dev/null && return 1
+    grep -q "^Type=Link" "$f" 2>/dev/null && return 1
+    only="$(sed -n 's/^OnlyShowIn=//p' "$f" | head -n 1)"
+    if [ -n "$only" ]; then
+        case ";${only};" in *";Hyprland;"*) ;; *) return 1 ;; esac
+    fi
+    notshow="$(sed -n 's/^NotShowIn=//p' "$f" | head -n 1)"
+    if [ -n "$notshow" ]; then
+        case ";${notshow};" in *";Hyprland;"*) return 1 ;; esac
+    fi
+    first="$(sed -n 's/^Exec=//p' "$f" | head -n 1)"
+    [ -n "$first" ] || return 1
+    first="$(printf '%s' "$first" | sed -E 's/^((env|"[A-Za-z_][A-Za-z0-9_]*=[^"]*"|[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|[^[:space:]]*))[[:space:]]+)*//')"
+    case "$first" in
+        "\""*) first="$(printf '%s' "$first" | sed -e 's/^"//' -e 's/".*//')" ;;
+        *) first="${first%% *}" ;;
+    esac
+    [ -n "$first" ] || return 1
+    command -v "${first##*/}" >/dev/null 2>&1
+}
+
+# Register the host applications and prune the ones that disappeared. Every
+# pass refreshes the copies, so a package update or a new entry converges.
+sync_host_apps() {
+    mkdir -p "$APPS_DIR" "$STATE_DIR"
+    local dir f base desired=""
+    for dir in $HOST_APPS_DIRS; do
+        [ -d "$dir" ] || continue
+        for f in "$dir"/*.desktop; do
+            [ -f "$f" ] || continue
+            host_app_ok "$f" || continue
+            base="$(basename "$f")"
+            desired="${desired}${base}"$'\n'
+            cp -f "$f" "$APPS_DIR/host-$base" 2>/dev/null || continue
+            if ! grep -q "^${HOST_MARKER}$" "$APPS_DIR/host-$base"; then
+                sed -i "/^\[Desktop Entry\]$/a ${HOST_MARKER}" "$APPS_DIR/host-$base"
+            fi
+        done
+    done
+
+    local existing
+    for f in "$APPS_DIR"/host-*.desktop; do
+        [ -f "$f" ] || continue
+        grep -q "^${HOST_MARKER}$" "$f" || continue
+        existing="$(basename "$f")"
+        existing="${existing#host-}"
+        printf '%s' "$desired" | grep -qxF "$existing" && continue
+        rm -f "$f"
+        log "removed stale host app: host-$existing"
+    done
+}
+
 # Register one running container: export, then converge its per-app entries,
 # icons and Steam cover art.
 sync_container() {
@@ -478,6 +549,10 @@ sync_container() {
 # One registration pass over the running containers. Returns non-zero when it
 # skipped (no distrobox / no container list), so --watch retries.
 sync() {
+    # Host apps need neither distrobox nor podman; register them first so a
+    # skipped container pass still leaves them registered.
+    sync_host_apps || true
+
     command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 1; }
 
     local all running

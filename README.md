@@ -29,7 +29,7 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 ## できること
 
 - **シェル**（quickshell, 画面下）: 左のランチャーボタン、中央の 1〜10 ワークスペースページャ、右に `[トレイ][Wi-Fi/BT/バッテリー/音量][時計]`。
-- **ランチャー**: アプリ一覧の上に「コンテナ（hyprtomic-gui / Flatpak / 他の distrobox）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。コンテナ側は最初のソースが選択され（All は重複表示が多いため廃止、Host は ghostty のみなので廃止。ghostty は `Super+Q`）、他の distrobox のアプリも `hyprtomic-distrobox-apps` が自動登録します。登録はコンテナの起動や再ログインのたびに最新化され、消えたアプリ・コンテナの古い登録やアイコンは削除・更新されます（`ujust refresh-distrobox-apps` で即時実行）。
+- **ランチャー**: アプリ一覧の上に「コンテナ（hyprtomic-gui / Flatpak / Host / 他の distrobox）」と「カテゴリ」の 2 段フィルタ。両方とも 1 行で、はみ出すと横スクロール。コンテナ側は最初のソースが選択されます（All は重複表示が多いため廃止）。**Host** はホスト側アプリのソースで、`hyprtomic-distrobox-apps` が `/usr/share/applications` の表示対象エントリを `host-<id>.desktop` として自動登録し、`distrobox-host-exec` 経由で起動します（virt-manager（latest-vypr）、nemo、file-roller など。ghostty もここに出ますが `Super+Q` もそのまま）。GUI コンテナや flatpak が同じアプリを提供している場合はそちらが優先されます（コンテナの ghostty オーバーライドがホスト版に勝つ）。他の distrobox のアプリも同様に自動登録され、コンテナの起動や再ログインのたびに最新化、消えたアプリ・コンテナの古い登録やアイコンは削除・更新されます（`ujust refresh-distrobox-apps` で即時実行）。
 - **コントロールセンター**: Wi-Fi / Bluetooth / 機内モード / テーマ切替 / 音量 / 輝度。
 - **通知・OSD・電源メニュー**: 通知は履歴を保持し、シェル右端のベルで開く。電源操作はホストへ転送。
 - **IME / クリップボード**: fcitx5（Mozkey IbG）と clipse がコンテナ内で動作。

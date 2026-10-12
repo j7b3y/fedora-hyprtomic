@@ -210,7 +210,12 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   source tarball (`files/scripts/vypr-build.sh`, sha256-pinned) and copied to
   `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
   ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
-  together — host and guest protocol versions must match.
+  together — host and guest protocol versions must match. The build script
+  patches the installed `launcher/vypr` so its `virsh` calls run under
+  `LC_ALL=C`: the script compares `virsh domstate` output against the English
+  words "running"/"shut off", and a translated (ja_JP) locale made
+  `vypr detect` try to start an already-running VM and exit. Drop the patch
+  once upstream fixes the comparison.
 - **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`) and
   configures an **existing** VM (it never creates one): picks a libvirt domain,
   edits the domain XML (memfd shared RAM, removes the USB tablet, topoext,

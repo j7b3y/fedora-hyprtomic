@@ -33,9 +33,8 @@ Scope {
 
     // ── Filters: launch source/container (top row) + app category ──
     // The container row intentionally has no "All" chip: showing every source
-    // at once only duplicated apps. Host entries (the ghostty override) are
-    // not offered either; the GUI container, Flatpak and the other distroboxes
-    // have their own chips.
+    // at once only duplicated apps. The GUI container, Flatpak, Host (the
+    // host's own applications) and the other distroboxes each have a chip.
     property string selectedCategory: "All Applications"
     property string selectedContainer: ""
 
@@ -97,9 +96,12 @@ Scope {
     }
 
     // ── Container / launch-source filter ─────────────────────────
-    // Flatpak (host), the GUI container itself, and any other distrobox whose
-    // entries were registered by hyprtomic-distrobox-apps. Host entries
-    // (distrobox-host-exec) are not offered as a chip.
+    // Flatpak (host), the GUI container itself, any other distrobox whose
+    // entries were registered by hyprtomic-distrobox-apps, and Host: the
+    // host's own applications, registered by the same script as
+    // host-<id>.desktop. A Host entry's Exec is host-native so the desktop
+    // file also works on the host; the launcher runs it through
+    // distrobox-host-exec (see launchApp).
     function distroboxContainer(entry) {
         var exec = entry.execString || "";
         var m = exec.match(/distrobox-enter\s+(?:--rootful\s+)?(?:-n|--name)\s+([^\s'"]+)/);
@@ -109,10 +111,19 @@ Scope {
         return "";
     }
 
+    // Host application: registered as host-<id>.desktop by
+    // hyprtomic-distrobox-apps with its original (host-native) Exec. The
+    // GUI container's ghostty override also lands here, via its
+    // distrobox-host-exec Exec.
+    function isHostEntry(entry) {
+        return (entry.id || "").indexOf("host-") === 0;
+    }
+
     function containerOf(entry) {
         if (isFlatpak(entry)) return "Flatpak";
         var c = distroboxContainer(entry);
         if (c !== "") return c;
+        if (isHostEntry(entry)) return "Host";
         var exec = entry.execString || "";
         if (/(^|[\/\s])distrobox-host-exec\b/.test(exec)) return "Host";
         return guiContainer;
@@ -158,8 +169,8 @@ Scope {
     }
 
     // Containers/sources that actually have apps, in a stable order: the GUI
-    // container, Flatpak, other distroboxes (A-Z). "All" is not offered (it
-    // only duplicated apps) and Host entries are not offered either.
+    // container, Flatpak, Host, other distroboxes (A-Z). "All" is not offered
+    // (it only duplicated apps).
     readonly property var visibleContainers: {
         var present = {};
         for (var i = 0; i < allApps.length; i++)
@@ -168,6 +179,7 @@ Scope {
         var result = [];
         if (present[guiContainer]) result.push(guiContainer);
         if (present["Flatpak"]) result.push("Flatpak");
+        if (present["Host"]) result.push("Host");
 
         var others = [];
         for (var name in present) {
@@ -418,10 +430,22 @@ Scope {
         var apps = [];
         var seen = {};
         var entries = DesktopEntries.applications.values;
+
+        // The GUI container, flatpaks and other distroboxes win over the host
+        // export: host-X is dropped when X is provided here (the container's
+        // ghostty override over the host ghostty entry, for example).
+        var nativeIds = {};
+        for (var n = 0; n < entries.length; n++) {
+            if (!isHostEntry(entries[n]))
+                nativeIds[entries[n].id || ""] = true;
+        }
+
         for (var i = 0; i < entries.length; i++) {
             var entry = entries[i];
+            var id = entry.id || "";
+            if (isHostEntry(entry) && nativeIds[id.substring(5)]) continue;
             // Deduplicate by id (not name) so native/flatpak variants both appear
-            var key = entry.id || entry.name;
+            var key = id || entry.name;
             if (entry && !entry.noDisplay && entry.name !== "" && !seen[key]) {
                 seen[key] = true;
                 apps.push(entry);
@@ -480,12 +504,16 @@ Scope {
     // Launch via `uwsm app` so container apps spawn as a transient systemd
     // unit in app-graphical.slice, detached from the compositor cgroup.
     // Flatpaks run on the HOST (the container has no flatpak binary), so those
-    // are launched with distrobox-host-exec instead. Flatpak web apps are not
-    // in the flatpak export list (their id is a web-app id), so their own Exec
-    // is forwarded to the host. Entries whose Exec is still `distrobox enter`
-    // cannot go through uwsm (no `distrobox` CLI in the container) and are
-    // rewritten to `distrobox-host-exec distrobox-enter`. Exported entries run
-    // through uwsm by id, or by Exec when uwsm rejects the id.
+    // are launched with distrobox-host-exec instead. Host applications
+    // (host-<id>.desktop registered by hyprtomic-distrobox-apps, plus the
+    // ghostty override) also run on the host - their Exec is host-native, so
+    // it is forwarded with distrobox-host-exec, a Terminal=true entry opening
+    // in the host ghostty. Flatpak web apps are not in the flatpak export list
+    // (their id is a web-app id), so their own Exec is forwarded to the host.
+    // Entries whose Exec is still `distrobox enter` cannot go through uwsm (no
+    // `distrobox` CLI in the container) and are rewritten to
+    // `distrobox-host-exec distrobox-enter`. Exported entries run through uwsm
+    // by id, or by Exec when uwsm rejects the id.
     function launchApp(entry) {
         recordRecentApp(entry.name);
         var id = entry.id || "";
@@ -500,6 +528,11 @@ Scope {
         if (isFlatpak(entry)) {
             if (flatpakIds[id] === true)
                 cmd = "distrobox-host-exec flatpak run " + id;
+            else
+                cmd = "distrobox-host-exec sh -c '" + stripFieldCodes(exec).replace(/'/g, "'\\''") + "'";
+        } else if (isHostEntry(entry) && exec.indexOf("distrobox-host-exec") < 0) {
+            if (entry.runInTerminal)
+                cmd = "distrobox-host-exec ghostty -e sh -c '" + stripFieldCodes(exec).replace(/'/g, "'\\''") + "'";
             else
                 cmd = "distrobox-host-exec sh -c '" + stripFieldCodes(exec).replace(/'/g, "'\\''") + "'";
         } else if (dbx !== "" && exec.indexOf("distrobox-host-exec") < 0) {

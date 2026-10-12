@@ -31,6 +31,15 @@ cd /src/host
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
+# The launcher compares `virsh domstate` output against the English state
+# words ("running", "shut off"), but virsh translates them: under a Japanese
+# locale the check fails, 'vypr detect' (and the start step of `vypr run`)
+# tries to start an already-running VM, libvirt refuses, and the command
+# exits. Run virsh in the C locale inside the installed launcher. Report
+# upstream; drop this patch when it is fixed there.
+sed -i 's|^set -uo pipefail$|set -uo pipefail\n\n# virsh prints its state words translated; the checks below expect English.\n# ja_JP made "vypr detect" try to start an already-running VM.\nvirsh() { LC_ALL=C command virsh "$@"; }|' ../launcher/vypr
+grep -q 'LC_ALL=C command virsh' ../launcher/vypr || { echo "vypr launcher locale patch failed" >&2; exit 1; }
+
 # Staged tree; recipe-vypr.yml copies these into the final image.
 mkdir -p /out/usr/bin \
          /out/usr/share/vypr/hooks \

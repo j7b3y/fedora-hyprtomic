@@ -273,6 +273,14 @@ collect_root_steps() {
         ROOT_STEPS+=("mkdir -p /var/lib/libvirt/dnsmasq /var/lib/libvirt/boot /var/lib/libvirt/filesystems /var/lib/libvirt/network; restorecon -R /var/lib/libvirt /var/cache/libvirt /var/log/libvirt 2>/dev/null || true; systemctl enable --now virtqemud.socket virtnetworkd.socket 2>/dev/null || true; systemctl restart virtnetworkd 2>/dev/null || true; virsh net-define /usr/share/libvirt/networks/default.xml >/dev/null 2>&1 || true; virsh net-autostart default >/dev/null 2>&1 || true; virsh net-start default >/dev/null 2>&1 || true")
     fi
 
+    # swtpm-tools' /var/lib/swtpm-localca is another victim of the /var wipe;
+    # 10-vypr-libvirt.conf recreates it now, but this heals a machine that
+    # booted before the fix. swtpm_setup needs it to author the TPM 2.0 EK
+    # certificate, and without it a domain with a vTPM never starts.
+    if [ ! -d /var/lib/swtpm-localca ]; then
+        ROOT_STEPS+=("install -d -m 0750 -o tss -g root /var/lib/swtpm-localca")
+    fi
+
     # IOMMU, if the firmware exposes it but the kernel has not enabled it.
     local groups
     groups=$(ls -1 /sys/kernel/iommu_groups 2>/dev/null | wc -l)

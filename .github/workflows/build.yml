@@ -65,7 +65,7 @@ jobs:
       # Job id is 'bluebuild' (no matrix) => required status check name = "bluebuild".
       - name: Build Custom Image
         if: github.event_name != 'pull_request' || steps.changes.outputs.build == 'true'
-        uses: blue-build/github-action@v1.11
+        uses: blue-build/github-action@v1.13
         with:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}

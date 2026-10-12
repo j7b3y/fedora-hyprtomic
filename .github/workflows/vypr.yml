@@ -59,7 +59,7 @@ jobs:
       # overwrite the base image's :latest). On PR it builds a PR-scoped image.
       - name: Build Vypr image
         if: github.event_name != 'pull_request' || steps.changes.outputs.build == 'true'
-        uses: blue-build/github-action@v1.11
+        uses: blue-build/github-action@v1.13
         with:
           recipe: recipe-vypr.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}

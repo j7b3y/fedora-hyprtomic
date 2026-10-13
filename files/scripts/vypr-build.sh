@@ -62,21 +62,43 @@ new = (
 assert s.count(old) == 1, "locale anchor"
 s = s.replace(old, new, 1)
 
-# 2. /etc/libvirt is root-only on the Fedora base: reading qemu.conf as the
-#    user yields nothing, and the check then treated "unreadable" as "wrong".
+# 2. qemu.conf and the checks that read it: /etc/libvirt is root-only on the
+#    Fedora base, so the read yields nothing and both ensure_guest_ram() and
+#    'vypr status'/'doctor' treated "unreadable" as "wrong". Read the running
+#    QEMU instead when the file cannot be read, and only fail the check on a
+#    value that was actually obtained.
+old = """qemu_conf() {
+    grep -sE "^[[:space:]]*$1[[:space:]]*=" /etc/libvirt/qemu.conf 2>/dev/null | tail -1 |
+        sed -E 's/^[^=]*=[[:space:]]*"?([^"]*)"?.*/\\1/'
+}"""
+new = """qemu_conf() {
+    local v
+    v=$(grep -sE "^[[:space:]]*$1[[:space:]]*=" /etc/libvirt/qemu.conf 2>/dev/null | tail -1 |
+        sed -E 's/^[^=]*=[[:space:]]*"?([^"]*)"?.*/\\1/')
+    if [ -z "$v" ]; then
+        # /etc/libvirt is root-only on the Fedora base; ask the running QEMU
+        # rather than pretending the file says nothing.
+        local p
+        p=$(ps -C qemu-system-x86_64 -o pid=,args= | awk -v n="-name guest=$VM," 'index($0, n) { print $1; exit }')
+        if [ -n "$p" ]; then
+            case "$1" in
+                user)  v=$(stat -c %U /proc/"$p") ;;
+                group) v=$(stat -c %G /proc/"$p") ;;
+            esac
+        fi
+    fi
+    printf '%s\\n' "$v"
+}"""
+assert s.count(old) == 1, "qemu_conf anchor"
+s = s.replace(old, new, 1)
+
 old = """ensure_guest_ram() {
     local want; want=$(id -gn)
     if [ "$(qemu_conf group)" != "$want" ]; then"""
 new = """ensure_guest_ram() {
-    local want have p; want=$(id -gn); have=$(qemu_conf group)
-    if [ -z "$have" ]; then
-        # /etc/libvirt is root-only on the Fedora base; ask the running QEMU
-        # rather than failing on a file this user cannot read.
-        p=$(ps -C qemu-system-x86_64 -o pid=,args= | awk -v n="-name guest=$VM," 'index($0, n) { print $1; exit }')
-        [ -n "$p" ] && have=$(stat -c %G /proc/"$p")
-    fi
+    local want have; want=$(id -gn); have=$(qemu_conf group)
     if [ -n "$have" ] && [ "$have" != "$want" ]; then"""
-assert s.count(old) == 1, "qemu.conf check anchor"
+assert s.count(old) == 1, "guest ram anchor"
 s = s.replace(old, new, 1)
 
 p.write_text(s)

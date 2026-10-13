@@ -225,15 +225,18 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   qemu.conf/libvirt group/default network/IOMMU kargs and offers the root
   steps via sudo after confirmation, creates `~/.ssh/vypr-guest` and
   `~/.config/vypr/config`, then builds the pairing CD (`vypr-setup.exe`,
-  public key, `pair.cmd`, a Japanese README; xorriso) and attaches it as a
-  USB CD - `--live` when the VM runs, so a running Windows sees it at once.
-  The guest side is one double-click of `pair.cmd` (key to the clipboard,
-  installer up). It is idempotent and **never rewrites** an existing config
-  (only appends missing keys). With no domain on the machine it offers to
-  create the Vypr-ready VM first (asks only for the Windows ISO, looks in
-  Downloads/Documents/Desktop for it, then runs `ujust vypr-create-vm`) and
-  continues. `ujust vypr-guest-exe` remains for copying the files out by
-  hand; `ujust vypr-doctor` runs Vypr's own health check.
+  public key, `pair.cmd`, `vc_redist.x64.exe` - the guest agent is a dynamic
+  MSVC build and upstream ships no Visual C++ runtime, which made the agent
+  task die with 0xC0000135 - and a Japanese README; xorriso) and attaches it
+  as a USB CD - `--live` when the VM runs, so a running Windows sees it at
+  once. `pair.cmd` installs the runtime, copies the key to the clipboard and
+  opens the installer, so the guest side is one double-click. It is
+  idempotent and **never rewrites** an existing config (only appends missing
+  keys). With no domain on the machine it offers to create the Vypr-ready VM
+  first (asks only for the Windows ISO, looks in Downloads/Documents/Desktop
+  for it, then runs `ujust vypr-create-vm`) and continues.
+  `ujust vypr-guest-exe` remains for copying the files out by hand;
+  `ujust vypr-doctor` runs Vypr's own health check.
 - **VM creation**: `ujust vypr-create-vm <iso>` runs
   `hyprtomic-vypr-create-vm`: virt-install with UEFI + Secure Boot + TPM 2.0,
   SATA disk and e1000e NIC (no extra Windows drivers) and an optional

@@ -165,16 +165,28 @@ attach_carrier() {
     }
     install -m644 "$KEY.pub" "$dir/vypr-guest.pub"
 
+    # The guest agent is a dynamic MSVC build and upstream ships no Visual C++
+    # runtime: without it the scheduled task dies with 0xC0000135 and nothing
+    # ever streams. Fetch the redistributable for the CD (Microsoft allows
+    # redistributing it); skip quietly when there is no network.
+    if [ ! -f "$dir/vc_redist.x64.exe" ]; then
+        curl -fsSL --retry 2 -o "$dir/vc_redist.x64.exe" \
+            https://aka.ms/vs/17/release/vc_redist.x64.exe 2>/dev/null \
+            || warn "could not fetch vc_redist.x64.exe - install it in Windows by hand"
+    fi
+
     # CRLF: the reader is Windows. pair.cmd stays ASCII so cmd.exe cannot
-    # mangle it; the README is Japanese and gets a BOM for Notepad.
-    printf '@echo off\r\nclip < "%%~dp0vypr-guest.pub"\r\nstart "" "%%~dp0vypr-setup.exe"\r\necho The public key is on the clipboard. Paste it into the "Host public key" box (Ctrl+V), tick what you need, and run the setup.\r\npause\r\n' > "$dir/pair.cmd"
+    # mangle it; the README is Japanese and gets a BOM for Notepad. pair.cmd
+    # installs the runtime first (an elevation prompt is fine - the user is at
+    # the console for the Windows-side steps anyway).
+    printf '@echo off\r\nif exist "%%~dp0vc_redist.x64.exe" (\r\n  echo Installing the Visual C++ runtime (needed by the guest agent)...\r\n  "%%~dp0vc_redist.x64.exe" /install /quiet /norestart\r\n)\r\nclip < "%%~dp0vypr-guest.pub"\r\nstart "" "%%~dp0vypr-setup.exe"\r\necho The public key is on the clipboard. Paste it into the "Host public key" box (Ctrl+V), tick what you need, and run the setup.\r\npause\r\n' > "$dir/pair.cmd"
     python3 - "$dir/README.txt" <<'PY'
 import sys
 text = (
     "\ufeffVypr ゲストセットアップ\r\n"
     "=========================\r\n"
     "\r\n"
-    "1. pair.cmd をダブルクリック\r\n"
+    "1. pair.cmd をダブルクリック（初回は VC++ ランタイムも自動で入ります）\r\n"
     "   → 公開鍵がクリップボードに入り、vypr-setup.exe が開きます\r\n"
     "2. \"Host public key\" 欄に Ctrl+V で貼り付け\r\n"
     "3. 必要な項目（Parsec ドライバ等）にチェックして実行\r\n"

@@ -101,6 +101,14 @@ new = """ensure_guest_ram() {
 assert s.count(old) == 1, "guest ram anchor"
 s = s.replace(old, new, 1)
 
+# 3. ssh/scp also talk to whatever agent the desktop runs (Bitwarden's, say),
+#    which then pops unlock dialogs for connections that authenticate with the
+#    -i key and never need an agent at all.
+old = '-i "$KEY"'
+new = '-i "$KEY" -o IdentityAgent=none'
+assert s.count(old) == 4, "ssh/scp anchors"
+s = s.replace(old, new)
+
 p.write_text(s)
 print("launcher patched")
 PY_PATCH

@@ -140,6 +140,8 @@ ensure_key() {
 # that beats every copy-by-hand dance and works before SSH exists in the
 # guest - which is exactly the moment it is needed.
 CARRIER_ISO="$HOME/.local/share/vypr/vypr-pair.iso"
+# 1 only when the CD is (or already was) attached; the "Next" text uses it.
+CARRIER_ATTACHED=0
 
 attach_carrier() {
     head2 "Pairing CD"
@@ -163,16 +165,24 @@ attach_carrier() {
         warn "vypr-setup.exe is missing from the image; skipping the pairing CD"
         return 0
     }
-    install -m644 "$KEY.pub" "$dir/vypr-guest.pub"
+    install -m644 "$KEY.pub" "$dir/vypr-guest.pub" || {
+        warn "the public key is missing; skipping the pairing CD"
+        return 0
+    }
 
     # The guest agent is a dynamic MSVC build and upstream ships no Visual C++
     # runtime: without it the scheduled task dies with 0xC0000135 and nothing
     # ever streams. Fetch the redistributable for the CD (Microsoft allows
-    # redistributing it); skip quietly when there is no network.
+    # redistributing it); skip quietly when there is no network. Downloaded to
+    # .part so an interrupted transfer cannot be mistaken for the real file.
     if [ ! -f "$dir/vc_redist.x64.exe" ]; then
-        curl -fsSL --retry 2 -o "$dir/vc_redist.x64.exe" \
-            https://aka.ms/vs/17/release/vc_redist.x64.exe 2>/dev/null \
-            || warn "could not fetch vc_redist.x64.exe - install it in Windows by hand"
+        if curl -fsSL --retry 2 -o "$dir/vc_redist.x64.exe.part" \
+                https://aka.ms/vs/17/release/vc_redist.x64.exe 2>/dev/null; then
+            mv -f "$dir/vc_redist.x64.exe.part" "$dir/vc_redist.x64.exe"
+        else
+            rm -f "$dir/vc_redist.x64.exe.part"
+            warn "could not fetch vc_redist.x64.exe - install it in Windows by hand"
+        fi
     fi
 
     # CRLF: the reader is Windows. pair.cmd stays ASCII so cmd.exe cannot
@@ -194,12 +204,27 @@ text = (
 open(sys.argv[1], "w", encoding="utf-8", newline="").write(text)
 PY
 
+    # Content stamp: skip the rebuild and the re-attach when nothing changed,
+    # so a running Windows is not churned on every setup run.
+    local stamp stampfile="$dir/.stamp"
+    stamp=$(stat -c '%Y:%s' /usr/share/vypr/vypr-setup.exe "$KEY.pub" "$dir/pair.cmd" "$dir/README.txt" "$dir/vc_redist.x64.exe" 2>/dev/null | sha256sum | cut -d' ' -f1)
+
+    local blk state
+    blk=$(virsh_out domblklist "$DOMAIN" 2>/dev/null)
+    state=$(virsh_out domstate "$DOMAIN" 2>/dev/null || echo "")
+    if [ -f "$stampfile" ] && [ "$(cat "$stampfile")" = "$stamp" ] \
+        && printf '%s\n' "$blk" | grep -qF "$CARRIER_ISO"; then
+        ok "the pairing CD is current and attached to '$DOMAIN'"
+        CARRIER_ATTACHED=1
+        return 0
+    fi
+
     # $mkiso is deliberately unquoted: "xorriso -as mkisofs" is two words.
     # Build beside the real path and rename over it: a running Windows may
-    # hold the old image open, and rename() keeps that reader on the old
-    # (identical) file while the next boot gets the fresh one.
+    # hold the old image open, and rename() keeps that reader on the old file;
+    # the re-attach below hands it the fresh one.
     local tmpiso="${CARRIER_ISO}.tmp"
-    if ! $mkiso -J -V VYPRPAIR -o "$tmpiso" "$dir" >/dev/null 2>&1; then
+    if ! $mkiso -J -V VYPR -o "$tmpiso" "$dir" >/dev/null 2>&1; then
         warn "could not build the pairing CD"
         rm -f "$tmpiso"
         return 0
@@ -207,13 +232,21 @@ PY
     mv -f "$tmpiso" "$CARRIER_ISO"
     ok "pairing CD built at $CARRIER_ISO"
 
-    if virsh_out domblklist "$DOMAIN" 2>/dev/null | grep -qF "$CARRIER_ISO"; then
-        ok "the pairing CD is already attached to '$DOMAIN'"
-        return 0
+    # An older copy of the CD: drop it first, so Windows sees the fresh image
+    # now instead of at its next boot.
+    local olddev
+    olddev=$(printf '%s\n' "$blk" | awk -v p="$CARRIER_ISO" 'index($0, p) { print $1; exit }')
+    if [ -n "$olddev" ]; then
+        if [ "$state" != "shut off" ]; then
+            virsh_do detach-disk "$DOMAIN" "$olddev" --live >/dev/null 2>&1 || true
+        fi
+        virsh_do detach-disk "$DOMAIN" "$olddev" --config >/dev/null 2>&1 || true
+        blk=$(virsh_out domblklist "$DOMAIN" 2>/dev/null)
     fi
+
     local dev="" letter
     for letter in c d e f g h; do
-        if ! virsh_out domblklist "$DOMAIN" 2>/dev/null | awk '{print $1}' | grep -qx "sd$letter"; then
+        if ! printf '%s\n' "$blk" | awk '{print $1}' | grep -qx "sd$letter"; then
             dev="sd$letter"; break
         fi
     done
@@ -221,14 +254,15 @@ PY
 
     # USB, not SATA: USB hotplugs into a running Windows, SATA does not.
     # --live makes it appear right away, --config keeps it across reboots.
-    local state flags=(--config)
-    state=$(virsh_out domstate "$DOMAIN" 2>/dev/null || echo "")
+    local flags=(--config)
     if [ "$state" != "shut off" ]; then
         flags=(--live --config)
     fi
     if virsh_do attach-disk "$DOMAIN" "$CARRIER_ISO" "$dev" --type cdrom \
             --sourcetype file --targetbus usb "${flags[@]}"; then
+        printf '%s\n' "$stamp" > "$stampfile"
         ok "pairing CD attached as $dev (Windows shows it as a DVD drive)"
+        CARRIER_ATTACHED=1
     else
         warn "could not attach the pairing CD; it is at $CARRIER_ISO"
     fi
@@ -305,19 +339,21 @@ offer_create_vm() {
     info "Vypr runs Windows applications out of a VM; the Vypr-ready Windows"
     info "VM can be created now (UEFI + Secure Boot + TPM 2.0, SATA, e1000e)."
     local reply
-    read -rp "  Create it now? [Y/n] " reply
-    case "${reply:-y}" in
-        [Nn]*)
-            bad "no libvirt domains exist yet. Vypr configures an existing VM;"
-            bad "create one with: ujust vypr-create-vm <Windows.iso>"
-            exit 1
-            ;;
-    esac
+    if [ "$ASSUME_YES" != 1 ]; then
+        read -rp "  Create it now? [Y/n] " reply
+        case "${reply:-y}" in
+            [Nn]*)
+                bad "no libvirt domains exist yet. Vypr configures an existing VM;"
+                bad "create one with: ujust vypr-create-vm <Windows.iso>"
+                exit 1
+                ;;
+        esac
+    fi
 
     # The Windows ISO is the one thing worth looking for before asking.
     local -a isos=()
     local dir f i iso=""
-    for dir in "$HOME/Downloads" "$HOME/Documents" "$HOME/デスクトップ" "$HOME/Desktop" "$HOME"; do
+    for dir in "$HOME/Downloads" "$HOME/Documents" "$HOME/デスクトップ" "$HOME/Desktop"; do
         [ -d "$dir" ] || continue
         while IFS= read -r f; do
             [ -n "$f" ] && isos+=("$f")
@@ -328,13 +364,17 @@ offer_create_vm() {
     done
     [ -n "$iso" ] || iso="${isos[0]:-}"
     [ -n "$iso" ] && info "found: $iso"
-    read -rp "  Windows ISO [$iso]: " reply
-    iso="${reply:-$iso}"
+    if [ "$ASSUME_YES" != 1 ]; then
+        read -rp "  Windows ISO [$iso]: " reply
+        iso="${reply:-$iso}"
+    fi
     if [ -z "$iso" ] || [ ! -f "$iso" ]; then
         bad "no such ISO: ${iso:-<empty>}"
         exit 1
     fi
-    if ! "$create" "$iso"; then
+    local -a create_args=()
+    [ -n "$DOMAIN_ARG" ] && create_args=(--name "$DOMAIN_ARG")
+    if ! "$create" "${create_args[@]}" "$iso"; then
         bad "the VM was not created"
         exit 1
     fi
@@ -370,6 +410,9 @@ choose_domain() {
     elif [ "${#domains[@]}" -eq 1 ]; then
         DOMAIN="${domains[0]}"
         info "only one domain exists, using '$DOMAIN'"
+    elif [ "$ASSUME_YES" = 1 ]; then
+        DOMAIN="${domains[0]}"
+        info "--yes and several domains exist; using '${DOMAIN}'"
     else
         printf '  Which VM runs Windows?\n'
         local i=1
@@ -754,25 +797,45 @@ EOF
 
     head2 "Next"
     cat <<EOF
-  Vypr is configured for '$DOMAIN'. The guest half is one installer run
-  inside Windows, and it is already on the pairing CD attached to the VM:
+  Vypr is configured for '$DOMAIN'.
+EOF
+    if [ "$CARRIER_ATTACHED" = 1 ]; then
+        cat <<EOF
+
+  The guest half is one installer run inside Windows, and it is on the
+  pairing CD attached to the VM:
 
     1. Install Windows in the console (skip when it is installed already):
          virt-manager --connect qemu:///system --show-domain-console '$DOMAIN'
 
     2. In Windows, open the 'Vypr' CD (usually the next drive letter after
-       the Windows ISO) and run pair.cmd: it puts the public key on the
-       clipboard and opens the installer. Paste the key, tick what you need,
-       run it, and let the installer restart Windows.
+       the Windows ISO) and run pair.cmd: it installs the Visual C++ runtime,
+       puts the public key on the clipboard and opens the installer. Paste
+       the key, tick what you need, run it, and let the installer restart
+       Windows.
 
     3. Back here, find apps and register them:
          ujust vypr-detect        # starts the VM, lists the guest's shortcuts
          vypr add <app> 'C:\\...'  # or one at a time
+EOF
+    else
+        cat <<EOF
+
+  The pairing CD could not be attached. The guest files are prepared in
+  $HOME/.local/share/vypr/guest-transfer ('ujust vypr-guest-exe' also copies
+  them to ~/Downloads): move vypr-setup.exe and vypr-guest.pub into the VM by
+  hand and run the installer there, pasting the key from the .pub file.
+
+    1. Install Windows in the console (skip when it is installed already):
+         virt-manager --connect qemu:///system --show-domain-console '$DOMAIN'
+EOF
+    fi
+    cat <<EOF
 
   Then launch a registered app like any other: from the launcher (they appear
   in the $USER_NAME container's source), or 'vypr run <app>'.
 
-  Every run of 'ujust vypr-setup' rebuilds and re-attaches the pairing CD;
+  Every run of 'ujust vypr-setup' keeps the pairing CD current;
   'ujust vypr-guest-exe' still copies the files out for copying by hand.
 
   Re-run this script any time - it only adds what is missing.

@@ -3,13 +3,15 @@
 #
 # Vypr shows Windows-VM applications as native windows:
 # https://github.com/Amzi-01/Vypr - host binaries are built into this image,
-# the VM-side half is `ujust vypr-guest-exe` + vypr-setup.exe inside Windows.
+# the guest side arrives on a pairing CD that `ujust vypr-setup` builds and
+# attaches (or `ujust vypr-guest-exe` for copying the files by hand).
 
-# Configure an existing libvirt VM for Vypr: shared memory, no USB tablet,
-# audio, optional virtiofs folder share, qemu.conf (root steps after
-# confirmation), host->guest key and ~/.config/vypr/config. Idempotent; an
-# existing config is never rewritten. Run again whenever you like.
-# (This does NOT create a VM - see vypr-create-vm below.)
+# Configure the VM for Vypr: shared memory, no USB tablet, audio, optional
+# virtiofs folder share, qemu.conf + libvirt group (root steps after
+# confirmation), host->guest key, ~/.config/vypr/config, and the pairing CD
+# with vypr-setup.exe, the public key and pair.cmd. Without a VM it offers to
+# create one first (see also vypr-create-vm below). Idempotent; an existing
+# config is never rewritten. Run again whenever you like.
 vypr-setup:
     @/usr/bin/hyprtomic-vypr-setup
 

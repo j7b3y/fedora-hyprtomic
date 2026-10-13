@@ -31,7 +31,7 @@ cd /src/host
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
-# Two launcher fixes are applied to the pinned source here (reportable
+# Three launcher fixes are applied to the pinned source here (reportable
 # upstream; drop them when upstream fixes them - the python asserts below
 # fail loudly if the anchors move):
 #

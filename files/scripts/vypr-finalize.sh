@@ -17,6 +17,8 @@ if [ -f "$fragment" ] && ! grep -q "61-vypr.just" "$target"; then
 fi
 rm -f "$fragment"
 
-# The setup helper must be executable (the files module preserves the repo
+# The setup helpers must be executable (the files module preserves the repo
 # mode, but keep this explicit like the other hyprtomic helpers).
 chmod +x /usr/bin/hyprtomic-vypr-setup
+chmod +x /usr/bin/hyprtomic-vypr-create-vm
+chmod +x /usr/libexec/hyprtomic/ensure-libvirt-group

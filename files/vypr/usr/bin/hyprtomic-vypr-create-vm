@@ -414,10 +414,14 @@ main() {
     # OVMF stops on "Press any key to boot from CD or DVD" and would fall
     # through to the empty disk otherwise. Press a key for the user so the VM
     # reaches the installer even when nobody watches the console; the presses
-    # stop long before the installer's own screens appear.
+    # stop long before the installer's own screens appear. Plain virsh first;
+    # `sudo -n` as the fallback so a missing timestamp can never turn this
+    # into an invisible password prompt mid-loop.
     local i
     for i in $(seq 1 8); do
-        virsh_do send-key "$NAME" --codeset linux KEY_SPACE >/dev/null 2>&1 || true
+        virsh send-key "$NAME" --codeset linux KEY_SPACE >/dev/null 2>&1 \
+            || sudo -n virsh send-key "$NAME" --codeset linux KEY_SPACE >/dev/null 2>&1 \
+            || true
         sleep 1
     done
 

@@ -226,7 +226,10 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
   USB tablet, topoext, emulated sound card, optional virtiofs share), checks
   qemu.conf/libvirt group/default network/IOMMU kargs and offers the root
-  steps via sudo after confirmation, creates `~/.ssh/vypr-guest` and
+  steps via sudo after confirmation (the libvirt membership is written as an
+  `/etc/group` override by `ensure-libvirt-group`: on ostree the group lives
+  in `/usr/lib/group`, where `usermod -aG libvirt` exits 0 without doing
+  anything and `gpasswd` refuses), creates `~/.ssh/vypr-guest` and
   `~/.config/vypr/config`, then builds the pairing CD (`vypr-setup.exe`,
   public key, `pair.cmd`, `vc_redist.x64.exe` - the guest agent is a dynamic
   MSVC build and upstream ships no Visual C++ runtime, which made the agent

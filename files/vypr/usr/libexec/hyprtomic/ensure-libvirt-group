@@ -1,0 +1,36 @@
+#!/bin/sh
+# Ensure a user is a member of a system group whose entry lives in the image
+# (/usr/lib/group) rather than in /etc/group.
+#
+# On an ostree host that is the normal shape of a group a later rebase brought
+# in: `usermod -aG libvirt user` exits 0 without writing anything and
+# `gpasswd -a` says "group does not exist in /etc/group", so the membership
+# silently never happens. NSS merges /etc/group over /usr/lib/group and an
+# override entry in /etc/group takes precedence, so write that instead.
+#
+# Usage: ensure-libvirt-group USER [GROUP]
+set -eu
+
+user="${1:?usage: ensure-libvirt-group USER [GROUP]}"
+group="${2:-libvirt}"
+file="${HYPRTOMIC_GROUP_FILE:-/etc/group}"
+
+getent group "$group" >/dev/null 2>&1 || {
+    echo "hyprtomic: group '$group' does not exist" >&2
+    exit 1
+}
+gid=$(getent group "$group" | cut -d: -f3)
+
+if grep -qE "^${group}:" "$file" 2>/dev/null; then
+    members=$(sed -n "s/^${group}:[^:]*:[^:]*:\(.*\)$/\1/p" "$file" | head -1)
+    case ",${members}," in
+        *,"${user}",*) exit 0 ;;
+    esac
+    if [ -n "$members" ]; then
+        sed -i "s/^${group}:[^:]*:[^:]*:.*$/${group}:x:${gid}:${members},${user}/" "$file"
+    else
+        sed -i "s/^${group}:[^:]*:[^:]*:.*$/${group}:x:${gid}:${user}/" "$file"
+    fi
+else
+    printf '%s:x:%s:%s\n' "$group" "$gid" "$user" >> "$file"
+fi

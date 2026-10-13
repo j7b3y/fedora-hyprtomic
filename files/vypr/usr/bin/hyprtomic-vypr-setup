@@ -403,10 +403,13 @@ ROOT_STEPS=()
 
 collect_root_steps() {
     # libvirt group: virsh as the user needs it (polkit allows the group).
+    # Requires the /etc/group override: on this image's base the group only
+    # lives in /usr/lib/group, where usermod exits 0 without changing anything
+    # and gpasswd refuses outright ("does not exist in /etc/group").
     if id -nG "$USER_NAME" | grep -qw libvirt; then
         ok "$USER_NAME is in the 'libvirt' group"
     elif getent group libvirt >/dev/null 2>&1; then
-        ROOT_STEPS+=("usermod -aG libvirt '$USER_NAME'")
+        ROOT_STEPS+=("/usr/libexec/hyprtomic/ensure-libvirt-group '$USER_NAME'")
     fi
 
     # QEMU under this user/group: without it /proc/<qemu>/fd is unreadable and

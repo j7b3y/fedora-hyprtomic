@@ -45,34 +45,29 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 [Vypr](https://github.com/Amzi-01/Vypr) は、libvirt の Windows VM 内のアプリを 1 アプリ = 1 ネイティブウィンドウとして Linux デスクトップに表示するツールです（RDP やコーデックなし、パススルー GPU のフレームを共有メモリ経由で表示）。`latest-vypr` イメージには Vypr 本体と libvirt/QEMU/virtiofsd/virt-manager が同梱され、`latest` イメージは従来どおり軽量なままです。どちらも同じリポジトリの別タグなので、`rpm-ostree` の rebase/upgrade で取り違えることはありません。
 
 - バイナリは [v0.5.0](https://github.com/Amzi-01/Vypr/releases/tag/v0.5.0) に固定してビルド時にコンパイルし、同タグの `vypr-setup.exe`（Windows 側インストーラー）も `/usr/share/vypr/` に同梱します。プロトコルが両側で一致します。
-- **`ujust vypr-setup` は既存 VM を構成するコマンドです（VM は作りません）**。VM がまだ無い場合は先に作成してください:
-  - `ujust vypr-create-vm ~/Downloads/Windows11.iso` … virt-install で Vypr 向けの Windows 11 VM（UEFI + Secure Boot + TPM 2.0、SATA ディスク、e1000e NIC）を作成。単独で渡せる GPU があれば作成時にパススルー（HDMI オーディオ機能込み）もアタッチします。
-  - または virt-manager で手動作成。
-- ホスト側のセットアップ（既存 VM の構成 + ゲスト準備）は `ujust vypr-setup` で任意のタイミングで実行できます。冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。
+- **`ujust vypr-setup` がセットアップの入口です**。VM がまだ無ければ Vypr 向け Windows 11 VM（UEFI + Secure Boot + TPM 2.0、SATA ディスク、e1000e NIC）の作成を提案し（`ujust vypr-create-vm` が動きます。聞かれるのは Windows ISO だけで、Downloads/Documents/デスクトップを先に探します。単独で渡せる GPU があればパススルーもアタッチ）、続けて VM 構成・ホスト→ゲスト鍵・`~/.config/vypr/config` を作成します。
+- ゲスト側に渡すもの（`vypr-setup.exe` + 公開鍵 + `pair.cmd` + 手順書）は**ペアリング CD** として自動生成し、VM に USB CD でアタッチします（起動中の VM には即時反映）。Windows 側では CD を開いて `pair.cmd` をダブルクリック → 貼り付けて実行 → 再起動、だけです。
+- 冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。手動コピー用の `ujust vypr-guest-exe` も残っています。
 
 ```bash
 # 1. ホストを latest-vypr へ（既存 latest からの切り替え）
 sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr
 systemctl reboot
 
-# 2. Windows VM を作成（既にある場合はスキップ）
-ujust vypr-create-vm ~/Downloads/Windows11.iso
-#    → 表示されるコンソールで Windows をインストール:
-#      virt-manager --show-domain-console win11
-
-# 3. Windows インストール後: VM 構成 + ホスト→ゲスト鍵 + 設定（何度でも再実行可）
+# 2. セットアップ（VM が無ければ作成を提案 → 構成 → 鍵 → ペアリング CD をアタッチ。何度でも再実行可）
 ujust vypr-setup
 
-# 4. ゲスト側: vypr-setup.exe を ~/Downloads へ出して公開鍵を表示
-ujust vypr-guest-exe
+# 3. コンソールで Windows をインストール:
+#    virt-manager --connect qemu:///system --show-domain-console win11
 
-# 5. Windows にコピーして実行 → 公開鍵を貼り付け → Windows 再起動
-# 6. アプリ登録（VM が起動していなければ起動します）
+# 4. Windows 側: ペアリング CD を開いて pair.cmd を実行 → 公開鍵を貼り付け → 実行 → 再起動
+
+# 5. アプリ登録（VM が起動していなければ起動します）
 ujust vypr-detect            # ゲストのショートカット/Steam を検出して選択
 # または: vypr add fivem 'C:\Users\You\Desktop\FiveM.lnk' --name FiveM
 ```
 
-- `vypr-create-vm` は Windows インストーラーが追加ドライバー無しで動くよう SATA/e1000e で作り、USB タブレットを追加しません（マウスは最初から相対）。GPU をアタッチした場合は libvirt が VM 実行中だけホストドライバーからデタッチします（managed hostdev）。ブート GPU は候補から除外します。
+- `vypr-create-vm` は Windows インストーラーが追加ドライバー無しで動くよう SATA/e1000e で作ります（virt-install の既定で USB タブレットが付きますが、インストール中のマウスが楽になるだけで、`ujust vypr-setup` のドメイン編集で除去されます）。GPU をアタッチした場合は libvirt が VM 実行中だけホストドライバーからデタッチします（managed hostdev）。ブート GPU は候補から除外します。
 - ISO の置き場に非 UTF-8 のファイル名があると virt-install がボリューム列挙で落ちるため、その場合だけ ISO を `~/.local/share/vypr/iso/` にハードリンクして使います。
 - 登録したアプリは `~/.local/share/applications/vypr-<app>.desktop` に書かれ、`$HOME` 共有経由でランチャーの「コンテナ（hyprtomic-gui）」ソースにそのまま並びます。GUI コンテナ内の `/usr/bin/vypr` は `distrobox-host-exec` でホストの実体へ転送するので、ランチャーからも通常のホストターミナルからも同じエントリで起動できます。
 - Hyprland では `vypr-*` ウィンドウを既定で **float** にし（サイズはゲスト側が所有するため）、`idle_inhibit=focus` と `no_blur` を付けています（`hyprland.lua` の `float-vypr` ルール。ゲームもウィンドウ表示前提）。変更したい場合は `local.conf` で上書きできます。

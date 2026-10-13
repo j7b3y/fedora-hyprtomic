@@ -398,11 +398,22 @@ collect_root_steps() {
     fi
 
     # QEMU under this user/group: without it /proc/<qemu>/fd is unreadable and
-    # no frame can be read out of the VM.
-    local quser qgroup
+    # no frame can be read out of the VM. /etc/libvirt is root-only on this
+    # image's base, so when the file cannot be read, ask the running QEMU
+    # instead; with neither, trust the earlier run rather than re-editing.
+    local quser qgroup p
     quser=$(qemu_conf user); qgroup=$(qemu_conf group)
+    if [ -z "$quser" ] && [ -z "$qgroup" ]; then
+        p=$(ps -C qemu-system-x86_64 -o pid=,args= 2>/dev/null | awk -v n="-name guest=$DOMAIN," 'index($0, n) { print $1; exit }')
+        if [ -n "$p" ]; then
+            quser=$(stat -c %U /proc/"$p" 2>/dev/null)
+            qgroup=$(stat -c %G /proc/"$p" 2>/dev/null)
+        fi
+    fi
     if [ "$quser" = "$USER_NAME" ] && [ "$qgroup" = "$USER_GROUP" ]; then
         ok "qemu.conf already runs QEMU as $USER_NAME:$USER_GROUP"
+    elif [ -z "$quser" ] && [ -z "$qgroup" ]; then
+        info "qemu.conf is root-only and no VM is running; skipping the qemu.conf check"
     else
         ROOT_STEPS+=("[ -f /etc/libvirt/qemu.conf.hyprtomic-vypr.bak ] || cp -a /etc/libvirt/qemu.conf /etc/libvirt/qemu.conf.hyprtomic-vypr.bak; sed -i 's|^#\\?user = .*|user = \"$USER_NAME\"|' /etc/libvirt/qemu.conf; sed -i 's|^#\\?group = .*|group = \"$USER_GROUP\"|' /etc/libvirt/qemu.conf; systemctl restart virtqemud 2>/dev/null || true")
     fi

@@ -31,14 +31,57 @@ cd /src/host
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
-# The launcher compares `virsh domstate` output against the English state
-# words ("running", "shut off"), but virsh translates them: under a Japanese
-# locale the check fails, 'vypr detect' (and the start step of `vypr run`)
-# tries to start an already-running VM, libvirt refuses, and the command
-# exits. Run virsh in the C locale inside the installed launcher. Report
-# upstream; drop this patch when it is fixed there.
-sed -i 's|^set -uo pipefail$|set -uo pipefail\n\n# virsh prints its state words translated; the checks below expect English.\n# ja_JP made "vypr detect" try to start an already-running VM.\nvirsh() { LC_ALL=C command virsh "$@"; }|' ../launcher/vypr
-grep -q 'LC_ALL=C command virsh' ../launcher/vypr || { echo "vypr launcher locale patch failed" >&2; exit 1; }
+# Two launcher fixes are applied to the pinned source here (reportable
+# upstream; drop them when upstream fixes them - the python asserts below
+# fail loudly if the anchors move):
+#
+#  1. The launcher compares `virsh domstate` output against the English state
+#     words ("running", "shut off"), but virsh translates them: under a
+#     Japanese locale the check fails, 'vypr detect' (and the start step of
+#     `vypr run`) tries to start an already-running VM. virsh runs in the C
+#     locale now.
+#  2. ensure_guest_ram() reads /etc/libvirt/qemu.conf, which is root-only on
+#     the Fedora base: the read yields nothing and the check died with "QEMU
+#     does not run under your group" for a perfectly correct file. An
+#     unreadable file is treated as unknown now (the running QEMU is asked
+#     first) and only a value that was actually read can fail the check.
+python3 - ../launcher/vypr <<'PY_PATCH'
+import pathlib, sys
+
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+
+# 1. virsh prints its state words translated; the comparisons expect English.
+old = "set -uo pipefail\n"
+new = (
+    "set -uo pipefail\n\n"
+    "# virsh prints its state words translated; the checks below expect English.\n"
+    "# ja_JP made \"vypr detect\" try to start an already-running VM.\n"
+    "virsh() { LC_ALL=C command virsh \"$@\"; }\n"
+)
+assert s.count(old) == 1, "locale anchor"
+s = s.replace(old, new, 1)
+
+# 2. /etc/libvirt is root-only on the Fedora base: reading qemu.conf as the
+#    user yields nothing, and the check then treated "unreadable" as "wrong".
+old = """ensure_guest_ram() {
+    local want; want=$(id -gn)
+    if [ "$(qemu_conf group)" != "$want" ]; then"""
+new = """ensure_guest_ram() {
+    local want have p; want=$(id -gn); have=$(qemu_conf group)
+    if [ -z "$have" ]; then
+        # /etc/libvirt is root-only on the Fedora base; ask the running QEMU
+        # rather than failing on a file this user cannot read.
+        p=$(ps -C qemu-system-x86_64 -o pid=,args= | awk -v n="-name guest=$VM," 'index($0, n) { print $1; exit }')
+        [ -n "$p" ] && have=$(stat -c %G /proc/"$p")
+    fi
+    if [ -n "$have" ] && [ "$have" != "$want" ]; then"""
+assert s.count(old) == 1, "qemu.conf check anchor"
+s = s.replace(old, new, 1)
+
+p.write_text(s)
+print("launcher patched")
+PY_PATCH
 
 # Staged tree; recipe-vypr.yml copies these into the final image.
 mkdir -p /out/usr/bin \

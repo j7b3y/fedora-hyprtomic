@@ -403,6 +403,16 @@ main() {
         exit 1
     fi
 
+    # OVMF stops on "Press any key to boot from CD or DVD" and would fall
+    # through to the empty disk otherwise. Press a key for the user so the VM
+    # reaches the installer even when nobody watches the console; the presses
+    # stop long before the installer's own screens appear.
+    local i
+    for i in $(seq 1 8); do
+        virsh_do send-key "$NAME" --codeset linux KEY_SPACE >/dev/null 2>&1 || true
+        sleep 1
+    done
+
     head2 "Next"
     cat <<EOF
   '$NAME' is created and the Windows installer is running.

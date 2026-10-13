@@ -50,6 +50,9 @@ modules:
         - virtiofsd
         - virt-manager
         - virt-install
+        # vypr-setup builds the pairing CD (vypr-setup.exe + public key) the
+        # guest side is delivered on.
+        - xorriso
         - swtpm
         - edk2-ovmf
         - python3-libvirt

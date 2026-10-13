@@ -31,6 +31,10 @@ CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vypr"
 CONF="$CONF_DIR/config"
 export LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}"
 PORT=47820
+# virsh prints its state words translated, while the domain state below is
+# compared against the English words ("running", "shut off"): keep the C locale
+# so a Japanese desktop does not break the comparisons.
+export LC_ALL=C
 
 DOMAIN_ARG=""
 GUEST_USER_ARG=""
@@ -130,6 +134,94 @@ ensure_key() {
     chmod 644 "$KEY.pub" 2>/dev/null || true
 }
 
+# The guest half needs two things that cannot travel over SSH itself: the
+# installer and the public key. Both go on a small ISO the VM sees as a CD,
+# with a one-double-click 'pair.cmd' (key to the clipboard, installer up);
+# that beats every copy-by-hand dance and works before SSH exists in the
+# guest - which is exactly the moment it is needed.
+CARRIER_ISO="$HOME/.local/share/vypr/vypr-pair.iso"
+
+attach_carrier() {
+    head2 "Pairing CD"
+
+    local mkiso=""
+    if have xorriso; then
+        mkiso="xorriso -as mkisofs"
+    elif have mkisofs; then
+        mkiso="mkisofs"
+    elif have genisoimage; then
+        mkiso="genisoimage"
+    else
+        warn "no ISO tool on this image, so the pairing CD cannot be built"
+        info "copy the guest files by hand instead: ujust vypr-guest-exe"
+        return 0
+    fi
+
+    local dir="$HOME/.local/share/vypr/guest-transfer"
+    install -d -m755 "$dir"
+    install -m644 /usr/share/vypr/vypr-setup.exe "$dir/vypr-setup.exe" 2>/dev/null || {
+        warn "vypr-setup.exe is missing from the image; skipping the pairing CD"
+        return 0
+    }
+    install -m644 "$KEY.pub" "$dir/vypr-guest.pub"
+
+    # CRLF: the reader is Windows. pair.cmd stays ASCII so cmd.exe cannot
+    # mangle it; the README is Japanese and gets a BOM for Notepad.
+    printf '@echo off\r\nclip < "%%~dp0vypr-guest.pub"\r\nstart "" "%%~dp0vypr-setup.exe"\r\necho The public key is on the clipboard. Paste it into the "Host public key" box (Ctrl+V), tick what you need, and run the setup.\r\npause\r\n' > "$dir/pair.cmd"
+    python3 - "$dir/README.txt" <<'PY'
+import sys
+text = (
+    "\ufeffVypr ゲストセットアップ\r\n"
+    "=========================\r\n"
+    "\r\n"
+    "1. pair.cmd をダブルクリック\r\n"
+    "   → 公開鍵がクリップボードに入り、vypr-setup.exe が開きます\r\n"
+    "2. \"Host public key\" 欄に Ctrl+V で貼り付け\r\n"
+    "3. 必要な項目（Parsec ドライバ等）にチェックして実行\r\n"
+    "4. 完了したら指示どおり Windows を再起動\r\n")
+open(sys.argv[1], "w", encoding="utf-8", newline="").write(text)
+PY
+
+    # $mkiso is deliberately unquoted: "xorriso -as mkisofs" is two words.
+    # Build beside the real path and rename over it: a running Windows may
+    # hold the old image open, and rename() keeps that reader on the old
+    # (identical) file while the next boot gets the fresh one.
+    local tmpiso="${CARRIER_ISO}.tmp"
+    if ! $mkiso -J -V VYPRPAIR -o "$tmpiso" "$dir" >/dev/null 2>&1; then
+        warn "could not build the pairing CD"
+        rm -f "$tmpiso"
+        return 0
+    fi
+    mv -f "$tmpiso" "$CARRIER_ISO"
+    ok "pairing CD built at $CARRIER_ISO"
+
+    if virsh_out domblklist "$DOMAIN" 2>/dev/null | grep -qF "$CARRIER_ISO"; then
+        ok "the pairing CD is already attached to '$DOMAIN'"
+        return 0
+    fi
+    local dev="" letter
+    for letter in c d e f g h; do
+        if ! virsh_out domblklist "$DOMAIN" 2>/dev/null | awk '{print $1}' | grep -qx "sd$letter"; then
+            dev="sd$letter"; break
+        fi
+    done
+    [ -n "$dev" ] || { warn "no free disk name for the pairing CD"; return 0; }
+
+    # USB, not SATA: USB hotplugs into a running Windows, SATA does not.
+    # --live makes it appear right away, --config keeps it across reboots.
+    local state flags=(--config)
+    state=$(virsh_out domstate "$DOMAIN" 2>/dev/null || echo "")
+    if [ "$state" != "shut off" ]; then
+        flags=(--live --config)
+    fi
+    if virsh_do attach-disk "$DOMAIN" "$CARRIER_ISO" "$dev" --type cdrom \
+            --sourcetype file --targetbus usb "${flags[@]}"; then
+        ok "pairing CD attached as $dev (Windows shows it as a DVD drive)"
+    else
+        warn "could not attach the pairing CD; it is at $CARRIER_ISO"
+    fi
+}
+
 add_missing() { # append KEY="value" only when KEY is not in the config at all
     local key="$1" value="$2"
     if ! grep -qE "^[[:space:]]*${key}=" "$CONF" 2>/dev/null; then
@@ -187,6 +279,55 @@ list_domains() {
     printf '%s\n' "$out" | grep -v '^$' || true
 }
 
+# On a machine with no VM yet, offer to build the Vypr-ready one right here:
+# hyprtomic-vypr-create-vm asks only for the ISO and an optional GPU, so a
+# fresh machine is "ujust vypr-setup", install Windows, "ujust vypr-setup".
+offer_create_vm() {
+    local create=/usr/bin/hyprtomic-vypr-create-vm
+    head2 "No VM yet"
+    if [ ! -x "$create" ]; then
+        bad "no libvirt domains exist and $create is missing"
+        bad "create the Windows VM first: ujust vypr-create-vm <Windows.iso>"
+        exit 1
+    fi
+    info "Vypr runs Windows applications out of a VM; the Vypr-ready Windows"
+    info "VM can be created now (UEFI + Secure Boot + TPM 2.0, SATA, e1000e)."
+    local reply
+    read -rp "  Create it now? [Y/n] " reply
+    case "${reply:-y}" in
+        [Nn]*)
+            bad "no libvirt domains exist yet. Vypr configures an existing VM;"
+            bad "create one with: ujust vypr-create-vm <Windows.iso>"
+            exit 1
+            ;;
+    esac
+
+    # The Windows ISO is the one thing worth looking for before asking.
+    local -a isos=()
+    local dir f i iso=""
+    for dir in "$HOME/Downloads" "$HOME/Documents" "$HOME/デスクトップ" "$HOME/Desktop" "$HOME"; do
+        [ -d "$dir" ] || continue
+        while IFS= read -r f; do
+            [ -n "$f" ] && isos+=("$f")
+        done < <(find "$dir" -maxdepth 1 -type f -iname '*.iso' 2>/dev/null)
+    done
+    for i in "${isos[@]}"; do
+        case "$(basename "$i")" in *[Ww]in*) iso="$i"; break ;; esac
+    done
+    [ -n "$iso" ] || iso="${isos[0]:-}"
+    [ -n "$iso" ] && info "found: $iso"
+    read -rp "  Windows ISO [$iso]: " reply
+    iso="${reply:-$iso}"
+    if [ -z "$iso" ] || [ ! -f "$iso" ]; then
+        bad "no such ISO: ${iso:-<empty>}"
+        exit 1
+    fi
+    if ! "$create" "$iso"; then
+        bad "the VM was not created"
+        exit 1
+    fi
+}
+
 choose_domain() {
     local -a domains=()
     local raw d
@@ -201,11 +342,13 @@ choose_domain() {
         [ -n "$d" ] && domains+=("$d")
     done <<< "$raw"
     if [ "${#domains[@]}" -eq 0 ]; then
-        bad "no libvirt domains exist yet. Vypr configures an existing VM, it"
-        bad "does not create one. Create the Windows VM first:"
-        info "  ujust vypr-create-vm ~/Downloads/Windows11.iso   (virt-install, Vypr-ready)"
-        info "  or virt-manager, then re-run ujust vypr-setup."
-        exit 1
+        offer_create_vm
+        raw=$(list_domains)
+        domains=()
+        while IFS= read -r d; do
+            [ -n "$d" ] && domains+=("$d")
+        done <<< "$raw"
+        [ "${#domains[@]}" -gt 0 ] || { bad "the VM did not appear"; exit 1; }
     fi
 
     if [ -n "$DOMAIN_ARG" ]; then
@@ -517,6 +660,8 @@ PY
     head2 "Guest access"
     ensure_key
 
+    attach_carrier
+
     head2 "Session configuration"
     mkdir -p "$CONF_DIR/apps"
     local guest_ip="$GUEST_IP_ARG"
@@ -583,22 +728,29 @@ EOF
 
     head2 "Next"
     cat <<EOF
-  Vypr is configured for '$DOMAIN'. The guest half is one installer you run
-  inside Windows:
+  Vypr is configured for '$DOMAIN'. The guest half is one installer run
+  inside Windows, and it is already on the pairing CD attached to the VM:
 
-    1. ujust vypr-guest-exe      # copies vypr-setup.exe to ~/Downloads
-    2. Copy it into the VM and run it; paste the public key it prints.
-    3. Restart Windows afterwards (the installer says so too).
-    4. Back here, find apps and register them:
+    1. Install Windows in the console (skip when it is installed already):
+         virt-manager --connect qemu:///system --show-domain-console '$DOMAIN'
 
+    2. In Windows, open the 'Vypr' CD (usually the next drive letter after
+       the Windows ISO) and run pair.cmd: it puts the public key on the
+       clipboard and opens the installer. Paste the key, tick what you need,
+       run it, and let the installer restart Windows.
+
+    3. Back here, find apps and register them:
          ujust vypr-detect        # starts the VM, lists the guest's shortcuts
          vypr add <app> 'C:\\...'  # or one at a time
 
   Then launch a registered app like any other: from the launcher (they appear
   in the $USER_NAME container's source), or 'vypr run <app>'.
 
-  Re-run this script any time - it only adds what is missing:
-  'ujust vypr-setup'. Health check: 'ujust vypr-doctor'.
+  Every run of 'ujust vypr-setup' rebuilds and re-attaches the pairing CD;
+  'ujust vypr-guest-exe' still copies the files out for copying by hand.
+
+  Re-run this script any time - it only adds what is missing.
+  Health check: 'ujust vypr-doctor'.
 
 EOF
 

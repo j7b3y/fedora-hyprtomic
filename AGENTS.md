@@ -211,25 +211,34 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
   ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
   together — host and guest protocol versions must match.
-- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`) and
-  configures an **existing** VM (it never creates one): picks a libvirt domain,
-  edits the domain XML (memfd shared RAM, removes the USB tablet, topoext,
-  emulated sound card, optional virtiofs share), checks qemu.conf/libvirt
-  group/default network/IOMMU kargs and offers the root steps via sudo after
-  confirmation, creates `~/.ssh/vypr-guest` and `~/.config/vypr/config`. It is
-  idempotent and **never rewrites** an existing config (only appends missing
-  keys). When there is no domain it points at `ujust vypr-create-vm`.
-  `ujust vypr-guest-exe` copies the installer to `~/Downloads` and prints the
-  public key; `ujust vypr-doctor` runs Vypr's own health check.
+- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`):
+  picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
+  USB tablet, topoext, emulated sound card, optional virtiofs share), checks
+  qemu.conf/libvirt group/default network/IOMMU kargs and offers the root
+  steps via sudo after confirmation, creates `~/.ssh/vypr-guest` and
+  `~/.config/vypr/config`, then builds the pairing CD (`vypr-setup.exe`,
+  public key, `pair.cmd`, a Japanese README; xorriso) and attaches it as a
+  USB CD - `--live` when the VM runs, so a running Windows sees it at once.
+  The guest side is one double-click of `pair.cmd` (key to the clipboard,
+  installer up). It is idempotent and **never rewrites** an existing config
+  (only appends missing keys). With no domain on the machine it offers to
+  create the Vypr-ready VM first (asks only for the Windows ISO, looks in
+  Downloads/Documents/Desktop for it, then runs `ujust vypr-create-vm`) and
+  continues. `ujust vypr-guest-exe` remains for copying the files out by
+  hand; `ujust vypr-doctor` runs Vypr's own health check.
 - **VM creation**: `ujust vypr-create-vm <iso>` runs
   `hyprtomic-vypr-create-vm`: virt-install with UEFI + Secure Boot + TPM 2.0,
-  SATA disk and e1000e NIC (no extra Windows drivers), no USB tablet, and an
-  optional passed-through GPU (boot_vga cards are excluded; the HDMI audio
-  function is matched by subsystem id and attached too; virt-install's hostdev
-  is managed, so libvirt detaches/reattaches the card around VM runs). If the
-  ISO's directory has non-UTF-8 file names (virt-install crashes listing them
-  in the auto-created pool), the ISO is hardlinked into
-  `~/.local/share/vypr/iso/` first. The ISO is a normal argument.
+  SATA disk and e1000e NIC (no extra Windows drivers) and an optional
+  passed-through GPU (boot_vga cards are excluded; the HDMI audio function is
+  matched by subsystem id and attached too; virt-install's hostdev is managed,
+  so libvirt detaches/reattaches the card around VM runs). The USB tablet
+  virt-install adds by default stays until `ujust vypr-setup` removes it - it
+  helps while installing, and raw-input games need it gone. If the ISO's
+  directory has non-UTF-8 file names (virt-install crashes listing them in
+  the auto-created pool), the ISO is hardlinked into
+  `~/.local/share/vypr/iso/` first. The ISO is a normal argument; right after
+  starting, a few keypresses are sent so OVMF's "Press any key to boot from
+  CD or DVD" prompt is not missed and the installer really starts.
 - **libvirt state dirs**: BlueBuild wipes `/var`, so the RPM-created
   `/var/lib/libvirt/**` and their SELinux labels are missing from the image;
   on first boot the daemons recreate them as `var_lib_t` and `virtnetworkd`

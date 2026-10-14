@@ -241,6 +241,10 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   keys). With no domain on the machine it offers to create the Vypr-ready VM
   first (asks only for the Windows ISO, looks in Downloads/Documents/Desktop
   for it, then runs `ujust vypr-create-vm`) and continues.
+  When the VM has no passed-through device it lists the usable cards (alone
+  in their IOMMU group, boot GPU excluded) and attaches the chosen one plus
+  its audio function as a managed hostdev (`virsh attach-device --config`;
+  `--yes` takes the first).
   `ujust vypr-guest-exe` remains for copying the files out by hand;
   `ujust vypr-doctor` runs Vypr's own health check.
 - **VM creation**: `ujust vypr-create-vm <iso>` runs

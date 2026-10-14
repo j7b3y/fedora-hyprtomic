@@ -55,6 +55,13 @@ info() { printf '  %s·%s %s\n' "$dim" "$rst" "$*"; }
 head2(){ printf '\n%s%s%s\n' "$bold" "$*" "$rst"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# GPU/IOMMU helpers, shared with hyprtomic-vypr-create-vm.
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/../libexec/hyprtomic/vypr-gpu" || {
+    bad "../libexec/hyprtomic/vypr-gpu is missing - reinstall"
+    exit 1
+}
+
 usage() {
     sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
 }
@@ -440,6 +447,105 @@ choose_domain() {
     fi
 }
 
+# Vypr reads frames out of a passed-through GPU; a VM without one streams
+# nothing. hyprtomic-vypr-create-vm attaches the card at creation; this is the
+# convergence for a VM that was made without one, or had it removed while
+# Windows was being installed.
+offer_gpu() {
+    local xml
+    xml=$(virsh_out dumpxml --inactive "$DOMAIN" 2>/dev/null) || xml=""
+    if [ -z "$xml" ]; then
+        warn "could not read the domain XML to check for a passed-through GPU"
+        return 0
+    fi
+    if printf '%s' "$xml" | grep -q "<hostdev"; then
+        ok "the VM already has a passed-through PCI device"
+        return 0
+    fi
+
+    head2 "Graphics cards"
+    local -a cand=()
+    local dev grp strays drv
+    for dev in $(gpu_devices); do
+        if [ "$(pci_boot_vga "$dev")" = "1" ]; then
+            info "$dev  $(gpu_name "$dev") - boot GPU (drives this desktop), not offered"
+            continue
+        fi
+        printf '  %s  %s\n' "$dev" "$(gpu_name "$dev")"
+        drv=$(pci_driver "$dev")
+        printf '    driver %s\n' "${drv:-none}"
+        grp=$(pci_group "$dev")
+        if [ -z "$grp" ]; then
+            printf '    ! no IOMMU group: the device is not behind an IOMMU, so it cannot be passed through\n'
+            continue
+        fi
+        strays=$(group_strays "$dev")
+        if [ -n "$strays" ]; then
+            printf '    ! cannot be passed through alone; its IOMMU group also holds:\n'
+            printf '%s\n' "$strays" | sed 's/^/      /'
+            continue
+        fi
+        printf '    alone in IOMMU group %s\n' "$(basename "$grp")"
+        cand+=("$dev")
+    done
+
+    if [ "${#cand[@]}" -eq 0 ]; then
+        warn "no card is usable for passthrough, so Vypr has no GPU to read"
+        warn "frames from. The card must be alone in its IOMMU group and must"
+        warn "not be the boot GPU; 'ujust vypr-gpu-swap' is the alternative."
+        return 0
+    fi
+
+    local reply
+    if [ "$ASSUME_YES" = 1 ]; then
+        reply=1
+        info "--yes: attaching the first usable card"
+    else
+        printf '\n  Attach a GPU? [1-%d, 0 = none] ' "${#cand[@]}"
+        read -rp "" reply
+    fi
+    case "${reply:-0}" in
+        0|"") info "attaching nothing; re-run 'ujust vypr-setup' when you want one"; return 0 ;;
+    esac
+    case "$reply" in
+        *[!0-9]*) warn "not a number; attaching nothing"; return 0 ;;
+    esac
+    if [ "$reply" -lt 1 ] || [ "$reply" -gt "${#cand[@]}" ]; then
+        warn "out of range; attaching nothing"
+        return 0
+    fi
+
+    local gpu="${cand[$((reply - 1))]}" audio
+    local -a devs=("$gpu")
+    while IFS= read -r audio; do
+        [ -n "$audio" ] || continue
+        devs+=("$audio")
+        info "and its audio function $audio"
+    done < <(gpu_audio_devices "$gpu")
+    drv=$(pci_driver "$gpu")
+    if [ "$drv" != "vfio-pci" ]; then
+        info "the card is on '${drv:-none}' now; libvirt detaches it from the host"
+        info "driver while the VM runs (managed hostdev) and gives it back on stop."
+    fi
+
+    local d placed=0
+    for d in "${devs[@]}"; do
+        if ! hostdev_xml "$d" > "$tmp/hostdev.xml"; then
+            warn "could not build a hostdev entry for $d"
+            continue
+        fi
+        if virsh_do attach-device "$DOMAIN" "$tmp/hostdev.xml" --config; then
+            ok "attached $d ($(gpu_name "$d"))"
+            placed=1
+        else
+            warn "could not attach $d"
+        fi
+    done
+    if [ "$placed" = 1 ]; then
+        info "it takes effect at the VM's next boot; 'ujust vypr-doctor' shows the result"
+    fi
+}
+
 # ------------------------------------------------------------------ root steps
 
 ROOT_STEPS=()
@@ -560,14 +666,6 @@ main() {
     if [ -z "$dom_xml" ]; then
         bad "could not read the XML of '$DOMAIN'"
         exit 1
-    fi
-
-    # Vypr reads frames out of a passed-through GPU; without a hostdev there is
-    # nothing to read, and that is easy to miss until the first launch fails.
-    if ! printf '%s' "$dom_xml" | grep -q "<hostdev"; then
-        warn "the VM passes no PCI device through, so Vypr has no GPU to read"
-        warn "frames from. Attach one in virt-manager (Add Hardware > PCI Host"
-        warn "Device); it must be alone in its IOMMU group."
     fi
 
     # The share question, before the XML edit so both changes land together.
@@ -722,6 +820,8 @@ PY
     else
         ok "the domain already has everything it needs"
     fi
+
+    offer_gpu
 
     collect_root_steps
     run_root_steps || true

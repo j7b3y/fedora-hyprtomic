@@ -93,53 +93,10 @@ virsh_out() {
 }
 
 # ------------------------------------------------------------------ GPUs
-gpu_devices() {
-    { lspci -Dn -d ::0300 2>/dev/null; lspci -Dn -d ::0302 2>/dev/null; } |
-        awk '{print $1}' | sort -u
-}
-pci_class()    { cat "/sys/bus/pci/devices/$1/class" 2>/dev/null; }
-pci_boot_vga() { cat "/sys/bus/pci/devices/$1/boot_vga" 2>/dev/null; }
-pci_driver()   { local p; p=$(readlink -f "/sys/bus/pci/devices/$1/driver" 2>/dev/null); [ -n "$p" ] && basename "$p"; }
-# readlink -f prints its argument even when the last component does not exist,
-# so a device with no iommu_group symlink (IOMMU off) would look grouped.
-# Require the resolved group directory to exist.
-pci_group() {
-    local g
-    g=$(readlink -f "/sys/bus/pci/devices/$1/iommu_group" 2>/dev/null) || return 1
-    [ -e "$g/devices" ] || return 1
-    printf '%s' "$g"
-}
-pci_slot()     { printf '%s' "$1" | sed 's/\.[0-9]*$//'; }
-pci_subsys()   { printf '%s:%s' "$(cat "/sys/bus/pci/devices/$1/subsystem_vendor" 2>/dev/null)" "$(cat "/sys/bus/pci/devices/$1/subsystem_device" 2>/dev/null)"; }
-gpu_name()     { lspci -Dmm -s "$1" 2>/dev/null | awk -F'"' '{printf "%s %s", $4, $6}'; }
-
-# Everything in the card's IOMMU group that is neither another function of the
-# same card nor a bridge: with any of those, the group cannot be passed through.
-group_strays() {
-    local dev="$1" grp slot m cls
-    grp=$(basename "$(pci_group "$dev")") || return 0
-    slot=$(pci_slot "$dev")
-    for m in /sys/kernel/iommu_groups/"$grp"/devices/*; do
-        [ -e "$m" ] || continue
-        m=$(basename "$m")
-        [ "$(pci_slot "$m")" = "$slot" ] && continue
-        cls=$(pci_class "$m")
-        case "$cls" in 0x0600*|0x0604*) continue ;; esac
-        printf '%s\n' "$m"
-    done
-}
-
-# The HDMI audio function that belongs to a card, wherever the board put it
-# (same slot on most boards, a separate slot on some). Matched by subsystem id.
-gpu_audio_devices() {
-    local gpu="$1" subsys d
-    subsys=$(pci_subsys "$gpu")
-    [ -n "$subsys" ] && [ "$subsys" != ":" ] || return 0
-    for d in /sys/bus/pci/devices/*; do
-        [ -f "$d/class" ] || continue
-        case "$(cat "$d/class")" in 0x0403*) ;; *) continue ;; esac
-        [ "$(pci_subsys "${d##*/}")" = "$subsys" ] && printf '%s\n' "${d##*/}"
-    done
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/../libexec/hyprtomic/vypr-gpu" || {
+    echo "hyprtomic-vypr-create-vm: ../libexec/hyprtomic/vypr-gpu is missing - reinstall" >&2
+    exit 1
 }
 
 CANDIDATES=()

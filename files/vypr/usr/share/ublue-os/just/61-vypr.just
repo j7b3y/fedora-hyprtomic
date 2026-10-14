@@ -8,10 +8,11 @@
 
 # Configure the VM for Vypr: shared memory, no USB tablet, audio, optional
 # virtiofs folder share, qemu.conf + libvirt group (root steps after
-# confirmation), host->guest key, ~/.config/vypr/config, and the pairing CD
-# with vypr-setup.exe, the public key and pair.cmd. Without a VM it offers to
-# create one first (see also vypr-create-vm below). Idempotent; an existing
-# config is never rewritten. Run again whenever you like.
+# confirmation), a passed-through GPU when the VM has none, host->guest key,
+# ~/.config/vypr/config, and the pairing CD with vypr-setup.exe, the public
+# key and pair.cmd. Without a VM it offers to create one first (see also
+# vypr-create-vm below). Idempotent; an existing config is never rewritten.
+# Run again whenever you like.
 vypr-setup:
     @/usr/bin/hyprtomic-vypr-setup
 

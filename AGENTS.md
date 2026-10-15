@@ -211,17 +211,24 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
   ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
   together — host and guest protocol versions must match. The build script
-  applies three patches to the installed `launcher/vypr` (report upstream,
-  drop them when fixed there - the patch step asserts its anchors): its
-  `virsh` calls run under `LC_ALL=C` (the script compares `virsh domstate`
-  output against the English words "running"/"shut off", and ja_JP made `vypr
-  detect` try to start an already-running VM and exit); `qemu_conf` reads the
-  running QEMU when the root-only `/etc/libvirt/qemu.conf` cannot be read
-  (otherwise every check that uses it - `ensure_guest_ram`, `vypr status`,
-  `vypr doctor` - reported a wrong configuration for a correct one); and its
-  ssh/scp calls pass `-o IdentityAgent=none` (the desktop's SSH agent -
-  Bitwarden's, say - popped unlock dialogs for connections that authenticate
-  with the `-i` key and never need an agent).
+  applies four patches to the pinned source (report upstream, drop them when
+  fixed there - the patch step asserts its anchors). Three are in the
+  installed `launcher/vypr`: its `virsh` calls run under `LC_ALL=C` (the
+  script compares `virsh domstate` output against the English words
+  "running"/"shut off", and ja_JP made `vypr detect` try to start an
+  already-running VM and exit); `qemu_conf` reads the running QEMU when the
+  root-only `/etc/libvirt/qemu.conf` cannot be read (otherwise every check
+  that uses it - `ensure_guest_ram`, `vypr status`, `vypr doctor` - reported a
+  wrong configuration for a correct one); and its ssh/scp calls pass
+  `-o IdentityAgent=none` (the desktop's SSH agent - Bitwarden's, say -
+  popped unlock dialogs for connections that authenticate with the `-i` key
+  and never need an agent). The fourth fixes the window code
+  (`host/src/main.c`): application windows are fixed-size - the compositor's
+  size hints are pinned to the frame size, so a user resize does nothing
+  instead of stretching the picture into a size the guest cannot follow (a
+  maximized guest window made that permanent); the adoption on frame-size
+  changes updates hints and size together, and the decorated whole-desktop
+  view stays resizable.
 - **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`):
   picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
   USB tablet, topoext, emulated sound card, optional virtiofs share), checks

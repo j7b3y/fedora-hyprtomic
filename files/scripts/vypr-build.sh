@@ -31,9 +31,9 @@ cd /src/host
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
-# Three launcher fixes are applied to the pinned source here (reportable
-# upstream; drop them when upstream fixes them - the python asserts below
-# fail loudly if the anchors move):
+# Four fixes are applied to the pinned source here (reportable upstream; drop
+# them when upstream fixes them - the python asserts below fail loudly if the
+# anchors move). Three are in the launcher, one in the window code:
 #
 #  1. The launcher compares `virsh domstate` output against the English state
 #     words ("running", "shut off"), but virsh translates them: under a
@@ -45,7 +45,14 @@ cmake --build build
 #     does not run under your group" for a perfectly correct file. An
 #     unreadable file is treated as unknown now (the running QEMU is asked
 #     first) and only a value that was actually read can fail the check.
-python3 - ../launcher/vypr <<'PY_PATCH'
+#  3. ssh/scp pass -o IdentityAgent=none: the desktop's agent (Bitwarden's,
+#     say) popped unlock dialogs for guest calls that use the -i key and never
+#     need an agent.
+#  4. Fixed-size windows (host/src/main.c): the compositor's size hints are
+#     pinned to the frame size, so a user resize does nothing instead of
+#     stretching the picture into a size the guest cannot follow (a maximized
+#     guest window used to leave that permanent).
+python3 - ../launcher/vypr ../host/src/main.c <<'PY_PATCH'
 import pathlib, sys
 
 p = pathlib.Path(sys.argv[1])
@@ -110,7 +117,58 @@ assert s.count(old) == 4, "ssh/scp anchors"
 s = s.replace(old, new)
 
 p.write_text(s)
-print("launcher patched")
+
+# 4. Fixed-size the application windows (host/src/main.c). With the size hints
+#    pinned to the frame size, the compositor refuses user resizes instead of
+#    leaving a stretched picture when the guest cannot follow (a maximized
+#    guest window made that permanent). SDL commits queued limit changes with
+#    the next SetWindowSize, so the adoption below updates hints and size
+#    together; the whole-desktop view stays resizable, as it is decorated and
+#    dragged by its decorations.
+m = pathlib.Path(sys.argv[2])
+s = m.read_text()
+
+old = """    views[0].win = SDL_CreateWindow(opt.title, win_w, win_h,
+                                    SDL_WINDOW_RESIZABLE | vk_window_flag(opt.backend) |
+                                    (decorated ? 0 : SDL_WINDOW_BORDERLESS));
+    if (!views[0].win) {
+        fprintf(stderr, "vypr: SDL_CreateWindow: %s\\n", SDL_GetError());
+        return 1;
+    }
+"""
+new = old + """
+    /*
+     * Fixed window size: the guest owns the size and the picture is never
+     * scaled, so pin the compositor's size hints to the window size - a user
+     * resize then does nothing instead of stretching the frame into a size the
+     * guest cannot follow. The frame-size adoption below keeps the hints in
+     * step. The whole-desktop view stays resizable: it is decorated and is
+     * dragged by its decorations.
+     */
+    if (!decorated) {
+        SDL_SetWindowMinimumSize(views[0].win, win_w, win_h);
+        SDL_SetWindowMaximumSize(views[0].win, win_w, win_h);
+    }
+"""
+assert s.count(old) == 1, "create anchor"
+s = s.replace(old, new, 1)
+
+old = """                    if (!v->is_popup && resize_at == 0 && !(opt.size_w && opt.size_h))
+                        SDL_SetWindowSize(v->win, (int)f.width, (int)f.height);
+"""
+new = """                    if (!v->is_popup && resize_at == 0 && !(opt.size_w && opt.size_h)) {
+                        if (opt.window_id != VYPR_DESKTOP_WINDOW_ID) {
+                            SDL_SetWindowMinimumSize(v->win, (int)f.width, (int)f.height);
+                            SDL_SetWindowMaximumSize(v->win, (int)f.width, (int)f.height);
+                        }
+                        SDL_SetWindowSize(v->win, (int)f.width, (int)f.height);
+                    }
+"""
+assert s.count(old) == 1, "adoption anchor"
+s = s.replace(old, new, 1)
+
+m.write_text(s)
+print("window code patched")
 PY_PATCH
 
 # Staged tree; recipe-vypr.yml copies these into the final image.

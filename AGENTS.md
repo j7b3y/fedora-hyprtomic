@@ -291,6 +291,14 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   source chip. `files/gui/usr/bin/vypr` is a shim that forwards the whole
   command to the host with `distrobox-host-exec`, so the absolute Exec resolves
   inside the container; on the host the same path is the real launcher.
+- **Chromium apps**: the guest agent rejects windows with
+  `WS_EX_NOREDIRECTIONBITMAP` (its own comment admits WGC could capture them);
+  Chromium with DirectComposition sets it, so an Edge window can exist on the
+  guest desktop but never appear to `vypr run` (upstream master still filters
+  it - report pending). Launching with `--disable-direct-composition` restores
+  the redirection bitmap and it streams; point the registered task's `cmd /c`
+  at a small .cmd that passes the flag. `vypr add` recreates the task, so the
+  flag has to be re-applied after re-registering.
 - **Hyprland**: Vypr windows are ordinary xdg_toplevels whose class/app_id is
   `vypr-<app>` (matching the desktop entry for icon/name). The skel
   `float-vypr` window rule floats them, centers them, sets

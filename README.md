@@ -85,7 +85,14 @@ ujust vypr-detect            # ゲストのショートカット/Steam を検出
   - ブート時にカードを渡したくない場合は Vypr の GPU swap（`ujust vypr-gpu-swap` が手順を表示。libvirt フックを `/etc/libvirt/hooks/qemu` に置く方式）が使えます。`vypr-create-vm` / virt-manager の hostdev は `managed='yes'` なので、libvirt 自身が起動時だけデタッチする方式です。どちらもイメージ更新に上書きされません。
   - BlueBuild はビルド時に `/var` を消すため、libvirt の状態ディレクトリはイメージに含まれません。`latest-vypr` は `tmpfiles.d` で再作成・再ラベル（SELinux）し、`virtnetworkd` が既定ネットワークを起動できるようにしています（古いブートでラベルが壊れていても ujust の root ステップが修復します）。
 - **注意**: `vypr-setup.exe` を実行した Windows は「Lock pages in memory」権限と自動ログイン、SSH サーバー、任意で UAC 無効化（`OPEN_ELEVATION=1`）が設定されます。UAC の無効化は VM のセキュリティを下げるので、`vypr open-elevation --remove` で戻せます。`ujust vypr-doctor` が現在の状態を確認できます。
-- **Chromium 系アプリ（Edge など）が表示されないとき**: upstream のエージェントは `WS_EX_NOREDIRECTIONBITMAP` のウィンドウを除外するため、DirectComposition を使う Chromium アプリは `vypr run` から見えないことがあります（upstream master でも同じ・報告予定）。`--disable-direct-composition` 付きで起動すると表示されます。例: `run-edge-flag.cmd` に `start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --disable-direct-composition` を書き、登録タスク（`schtasks /delete` → `/create ... /tr "cmd /c C:\Users\<you>\run-edge-flag.cmd" /sc once /st 00:00 /it /rl limited /f`）の起動先をそれに差し替える。`vypr add` をやり直すとタスクが再生成されるため、その都度差し替えが必要です。
+- **Chromium 系アプリ（Edge など）が表示されないとき**: upstream のエージェントは `WS_EX_NOREDIRECTIONBITMAP` のウィンドウを除外するため、DirectComposition を使う Chromium アプリは `vypr run` から見えないことがあります（upstream master でも同じ・報告予定）。`--disable-direct-composition` 付きで起動すると表示されます。**Chromium は既に Edge が動いていると新しい起動の引数を無視し、既存プロセスに窓を任せる**ため、起動スクリプトでは先に全部終了させてください。例: `run-edge-flag.cmd` に
+  ```
+  taskkill /f /im msedge.exe
+  timeout /t 2 /nobreak
+  start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --disable-direct-composition
+  ```
+  を書き、登録タスク（`schtasks /delete` → `/create ... /tr "cmd /c C:\Users\<you>\run-edge-flag.cmd" /sc once /st 00:00 /it /rl limited /f`）の起動先をそれに差し替える。`vypr add` をやり直すとタスクが再生成されるため、その都度差し替えが必要です。起動のたびに Edge を終了→再起動するのでタブは Edge のセッション復元に頼ることになります。
+- **ゲスト側の電源設定**: アイドルでゲストのディスプレイ/sleep が切れると再描画が止まり、キャプチャが飢餓してホストのウィンドウがフリーズします。`ujust vypr-setup` はゲストへ SSH が通るようになると `powercfg /change monitor-timeout-* 0`・`standby-timeout-* 0`・`powercfg /h off` を冪等に適用します（ペアリング後に再実行）。
 
 ## インストール
 

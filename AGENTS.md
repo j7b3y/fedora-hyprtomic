@@ -296,9 +296,16 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   Chromium with DirectComposition sets it, so an Edge window can exist on the
   guest desktop but never appear to `vypr run` (upstream master still filters
   it - report pending). Launching with `--disable-direct-composition` restores
-  the redirection bitmap and it streams; point the registered task's `cmd /c`
-  at a small .cmd that passes the flag. `vypr add` recreates the task, so the
-  flag has to be re-applied after re-registering.
+  the redirection bitmap and it streams - and because Chromium hands a new
+  launch to an already-running instance (which ignores the flag), the launch
+  script must `taskkill /f /im msedge.exe` first. Point the registered task's
+  `cmd /c` at such a .cmd; `vypr add` recreates the task, so the flag has to
+  be re-applied after re-registering.
+- **Guest power**: the guest's own display/sleep timeouts starve the capture
+  (no repaints, no frames, a frozen host window). `hyprtomic-vypr-setup`
+  applies `powercfg /change monitor-timeout-* 0`, `standby-timeout-* 0` and
+  `powercfg /h off` over SSH whenever the guest answers (re-run after
+  pairing).
 - **Hyprland**: Vypr windows are ordinary xdg_toplevels whose class/app_id is
   `vypr-<app>` (matching the desktop entry for icon/name). The skel
   `float-vypr` window rule floats them, centers them, sets

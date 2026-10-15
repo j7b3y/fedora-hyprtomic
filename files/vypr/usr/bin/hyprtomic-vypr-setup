@@ -895,6 +895,28 @@ EOF
         add_missing SHUTDOWN_GRACE 60
     fi
 
+    # The guest's own power settings starve the capture: an idle guest stops
+    # repainting, WGC delivers nothing, and the host window freezes on its
+    # last frame. Applied once the guest answers over SSH; harmless to repeat.
+    head2 "Guest power settings"
+    if ssh -n -i "$KEY" -o IdentityAgent=none -o BatchMode=yes \
+            -o StrictHostKeyChecking=no -o ConnectTimeout=4 \
+            "$guest_user@$guest_ip" true >/dev/null 2>&1; then
+        local pc
+        for pc in monitor-timeout-ac monitor-timeout-dc standby-timeout-ac standby-timeout-dc; do
+            ssh -n -i "$KEY" -o IdentityAgent=none -o BatchMode=yes \
+                -o StrictHostKeyChecking=no -o ConnectTimeout=4 \
+                "$guest_user@$guest_ip" "powercfg /change $pc 0" >/dev/null 2>&1 || true
+        done
+        ssh -n -i "$KEY" -o IdentityAgent=none -o BatchMode=yes \
+            -o StrictHostKeyChecking=no -o ConnectTimeout=4 \
+            "$guest_user@$guest_ip" "powercfg /h off" >/dev/null 2>&1 || true
+        ok "display and sleep timeouts disabled in the guest"
+    else
+        info "guest not reachable over SSH yet; re-run 'ujust vypr-setup' after"
+        info "the guest half is paired to apply the power settings"
+    fi
+
     head2 "Next"
     cat <<EOF
   Vypr is configured for '$DOMAIN'.

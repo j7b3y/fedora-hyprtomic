@@ -1,0 +1,50 @@
+#!/bin/sh
+# Ensure a user is a member of a system group whose entry lives in the image
+# (/usr/lib/group) rather than in /etc/group.
+#
+# On an ostree host that is the normal shape of a group a later rebase brought
+# in: `usermod -aG libvirt user` exits 0 without writing anything and
+# `gpasswd -a` says "group does not exist in /etc/group", so the membership
+# silently never happens. NSS merges /etc/group over /usr/lib/group and an
+# override entry in /etc/group takes precedence, so write that instead.
+#
+# Usage: ensure-libvirt-group USER [GROUP]
+# (HYPRTOMIC_GROUP_FILE overrides the target file; used by the tests.)
+set -eu
+
+user="${1:?usage: ensure-libvirt-group USER [GROUP]}"
+group="${2:-libvirt}"
+file="${HYPRTOMIC_GROUP_FILE:-/etc/group}"
+
+getent group "$group" >/dev/null 2>&1 || {
+    echo "hyprtomic: group '$group' does not exist" >&2
+    exit 1
+}
+gid=$(getent group "$group" | cut -d: -f3)
+
+if grep -qE "^${group}:" "$file" 2>/dev/null; then
+    # Rewrite through awk: names can carry characters sed would treat as
+    # syntax ("&", "|"), and awk leaves the rest of the line alone. A
+    # malformed line grows the missing member field rather than being missed.
+    tmp="$file.hyprtomic"
+    awk -v u="$user" -v g="$group" -F: 'BEGIN { OFS = ":" }
+        $1 == g {
+            has = 0
+            n = split($4, m, ",")
+            for (i = 1; i <= n; i++) if (m[i] == u) has = 1
+            if (!has) $4 = ($4 == "" ? u : $4 "," u)
+        }
+        { print }' "$file" > "$tmp"
+    cat "$tmp" > "$file"
+    rm -f "$tmp"
+else
+    printf '%s:x:%s:%s\n' "$group" "$gid" "$user" >> "$file"
+fi
+
+# Verify by reading the file back: the login session's group list is stale
+# until the next login, so it cannot be used here. Without this check the
+# original silent-failure mode could just move one exit code over.
+if ! sed -n "s/^${group}:[^:]*:[^:]*:\(.*\)$/\1/p" "$file" | tr ',' '\n' | grep -qxF "$user"; then
+    echo "hyprtomic: failed to add '$user' to '$group' in $file" >&2
+    exit 1
+fi

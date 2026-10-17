@@ -210,26 +210,63 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   source tarball (`files/scripts/vypr-build.sh`, sha256-pinned) and copied to
   `/usr/bin`; the same release's `vypr-setup.exe` (the Windows-side installer)
   ships at `/usr/share/vypr/vypr-setup.exe`. Bump `VYPR_TAG` and both hashes
-  together — host and guest protocol versions must match.
-- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`) and
-  configures an **existing** VM (it never creates one): picks a libvirt domain,
-  edits the domain XML (memfd shared RAM, removes the USB tablet, topoext,
-  emulated sound card, optional virtiofs share), checks qemu.conf/libvirt
-  group/default network/IOMMU kargs and offers the root steps via sudo after
-  confirmation, creates `~/.ssh/vypr-guest` and `~/.config/vypr/config`. It is
+  together — host and guest protocol versions must match. The build script
+  applies four patches to the pinned source (report upstream, drop them when
+  fixed there - the patch step asserts its anchors). Three are in the
+  installed `launcher/vypr`: its `virsh` calls run under `LC_ALL=C` (the
+  script compares `virsh domstate` output against the English words
+  "running"/"shut off", and ja_JP made `vypr detect` try to start an
+  already-running VM and exit); `qemu_conf` reads the running QEMU when the
+  root-only `/etc/libvirt/qemu.conf` cannot be read (otherwise every check
+  that uses it - `ensure_guest_ram`, `vypr status`, `vypr doctor` - reported a
+  wrong configuration for a correct one); and its ssh/scp calls pass
+  `-o IdentityAgent=none` (the desktop's SSH agent - Bitwarden's, say -
+  popped unlock dialogs for connections that authenticate with the `-i` key
+  and never need an agent). The fourth fixes the window code
+  (`host/src/main.c`): application windows are fixed-size - the compositor's
+  size hints are pinned to the frame size, so a user resize does nothing
+  instead of stretching the picture into a size the guest cannot follow (a
+  maximized guest window made that permanent); the adoption on frame-size
+  changes updates hints and size together, and the decorated whole-desktop
+  view stays resizable.
+- **Setup**: `ujust vypr-setup` runs `hyprtomic-vypr-setup` (`files/vypr/`):
+  picks a libvirt domain, edits the domain XML (memfd shared RAM, removes the
+  USB tablet, topoext, emulated sound card, optional virtiofs share), checks
+  qemu.conf/libvirt group/default network/IOMMU kargs and offers the root
+  steps via sudo after confirmation (the libvirt membership is written as an
+  `/etc/group` override by `ensure-libvirt-group`: on ostree the group lives
+  in `/usr/lib/group`, where `usermod -aG libvirt` exits 0 without doing
+  anything and `gpasswd` refuses), creates `~/.ssh/vypr-guest` and
+  `~/.config/vypr/config`, then builds the pairing CD (`vypr-setup.exe`,
+  public key, `pair.cmd`, `vc_redist.x64.exe` - the guest agent is a dynamic
+  MSVC build and upstream ships no Visual C++ runtime, which made the agent
+  task die with 0xC0000135 - and a Japanese README; xorriso) and attaches it
+  as a USB CD - `--live` when the VM runs, so a running Windows sees it at
+  once. `pair.cmd` installs the runtime, copies the key to the clipboard and
+  opens the installer, so the guest side is one double-click. It is
   idempotent and **never rewrites** an existing config (only appends missing
-  keys). When there is no domain it points at `ujust vypr-create-vm`.
-  `ujust vypr-guest-exe` copies the installer to `~/Downloads` and prints the
-  public key; `ujust vypr-doctor` runs Vypr's own health check.
+  keys). With no domain on the machine it offers to create the Vypr-ready VM
+  first (asks only for the Windows ISO, looks in Downloads/Documents/Desktop
+  for it, then runs `ujust vypr-create-vm`) and continues.
+  When the VM has no passed-through device it lists the usable cards (alone
+  in their IOMMU group, boot GPU excluded) and attaches the chosen one plus
+  its audio function as a managed hostdev (`virsh attach-device --config`;
+  `--yes` takes the first).
+  `ujust vypr-guest-exe` remains for copying the files out by hand;
+  `ujust vypr-doctor` runs Vypr's own health check.
 - **VM creation**: `ujust vypr-create-vm <iso>` runs
   `hyprtomic-vypr-create-vm`: virt-install with UEFI + Secure Boot + TPM 2.0,
-  SATA disk and e1000e NIC (no extra Windows drivers), no USB tablet, and an
-  optional passed-through GPU (boot_vga cards are excluded; the HDMI audio
-  function is matched by subsystem id and attached too; virt-install's hostdev
-  is managed, so libvirt detaches/reattaches the card around VM runs). If the
-  ISO's directory has non-UTF-8 file names (virt-install crashes listing them
-  in the auto-created pool), the ISO is hardlinked into
-  `~/.local/share/vypr/iso/` first. The ISO is a normal argument.
+  SATA disk and e1000e NIC (no extra Windows drivers) and an optional
+  passed-through GPU (boot_vga cards are excluded; the HDMI audio function is
+  matched by subsystem id and attached too; virt-install's hostdev is managed,
+  so libvirt detaches/reattaches the card around VM runs). The USB tablet
+  virt-install adds by default stays until `ujust vypr-setup` removes it - it
+  helps while installing, and raw-input games need it gone. If the ISO's
+  directory has non-UTF-8 file names (virt-install crashes listing them in
+  the auto-created pool), the ISO is hardlinked into
+  `~/.local/share/vypr/iso/` first. The ISO is a normal argument; right after
+  starting, a few keypresses are sent so OVMF's "Press any key to boot from
+  CD or DVD" prompt is not missed and the installer really starts.
 - **libvirt state dirs**: BlueBuild wipes `/var`, so the RPM-created
   `/var/lib/libvirt/**` and their SELinux labels are missing from the image;
   on first boot the daemons recreate them as `var_lib_t` and `virtnetworkd`
@@ -261,6 +298,21 @@ with a passed-through GPU; https://github.com/Amzi-01/Vypr). The base
   source chip. `files/gui/usr/bin/vypr` is a shim that forwards the whole
   command to the host with `distrobox-host-exec`, so the absolute Exec resolves
   inside the container; on the host the same path is the real launcher.
+- **Chromium apps**: the guest agent rejects windows with
+  `WS_EX_NOREDIRECTIONBITMAP` (its own comment admits WGC could capture them);
+  Chromium with DirectComposition sets it, so an Edge window can exist on the
+  guest desktop but never appear to `vypr run` (upstream master still filters
+  it - report pending). Launching with `--disable-direct-composition` restores
+  the redirection bitmap and it streams - and because Chromium hands a new
+  launch to an already-running instance (which ignores the flag), the launch
+  script must `taskkill /f /im msedge.exe` first. Point the registered task's
+  `cmd /c` at such a .cmd; `vypr add` recreates the task, so the flag has to
+  be re-applied after re-registering.
+- **Guest power**: the guest's own display/sleep timeouts starve the capture
+  (no repaints, no frames, a frozen host window). `hyprtomic-vypr-setup`
+  applies `powercfg /change monitor-timeout-* 0`, `standby-timeout-* 0` and
+  `powercfg /h off` over SSH whenever the guest answers (re-run after
+  pairing).
 - **Hyprland**: Vypr windows are ordinary xdg_toplevels whose class/app_id is
   `vypr-<app>` (matching the desktop entry for icon/name). The skel
   `float-vypr` window rule floats them, centers them, sets

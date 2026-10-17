@@ -45,34 +45,29 @@ GUI アプリとシェルはコンテナに閉じ込め、ホストはコンポ�
 [Vypr](https://github.com/Amzi-01/Vypr) は、libvirt の Windows VM 内のアプリを 1 アプリ = 1 ネイティブウィンドウとして Linux デスクトップに表示するツールです（RDP やコーデックなし、パススルー GPU のフレームを共有メモリ経由で表示）。`latest-vypr` イメージには Vypr 本体と libvirt/QEMU/virtiofsd/virt-manager が同梱され、`latest` イメージは従来どおり軽量なままです。どちらも同じリポジトリの別タグなので、`rpm-ostree` の rebase/upgrade で取り違えることはありません。
 
 - バイナリは [v0.5.0](https://github.com/Amzi-01/Vypr/releases/tag/v0.5.0) に固定してビルド時にコンパイルし、同タグの `vypr-setup.exe`（Windows 側インストーラー）も `/usr/share/vypr/` に同梱します。プロトコルが両側で一致します。
-- **`ujust vypr-setup` は既存 VM を構成するコマンドです（VM は作りません）**。VM がまだ無い場合は先に作成してください:
-  - `ujust vypr-create-vm ~/Downloads/Windows11.iso` … virt-install で Vypr 向けの Windows 11 VM（UEFI + Secure Boot + TPM 2.0、SATA ディスク、e1000e NIC）を作成。単独で渡せる GPU があれば作成時にパススルー（HDMI オーディオ機能込み）もアタッチします。
-  - または virt-manager で手動作成。
-- ホスト側のセットアップ（既存 VM の構成 + ゲスト準備）は `ujust vypr-setup` で任意のタイミングで実行できます。冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。
+- **`ujust vypr-setup` がセットアップの入口です**。VM がまだ無ければ Vypr 向け Windows 11 VM（UEFI + Secure Boot + TPM 2.0、SATA ディスク、e1000e NIC）の作成を提案し（`ujust vypr-create-vm` が動きます。聞かれるのは Windows ISO だけで、Downloads/Documents/デスクトップを先に探します。単独で渡せる GPU があればパススルーもアタッチ）、続けて VM 構成・ホスト→ゲスト鍵・`~/.config/vypr/config` を作成します。
+- ゲスト側に渡すもの（`vypr-setup.exe` + 公開鍵 + `pair.cmd` + 手順書）は**ペアリング CD** として自動生成し、VM に USB CD でアタッチします（起動中の VM には即時反映）。Windows 側では CD を開いて `pair.cmd` をダブルクリック → 貼り付けて実行 → 再起動、だけです。
+- 冪等で、既存の `~/.config/vypr/config` は書き換えず、足りないキーだけを追記します。手動コピー用の `ujust vypr-guest-exe` も残っています。
 
 ```bash
 # 1. ホストを latest-vypr へ（既存 latest からの切り替え）
 sudo rpm-ostree rebase ostree-image-signed:docker://ghcr.io/j7b3y/fedora-hyprtomic:latest-vypr
 systemctl reboot
 
-# 2. Windows VM を作成（既にある場合はスキップ）
-ujust vypr-create-vm ~/Downloads/Windows11.iso
-#    → 表示されるコンソールで Windows をインストール:
-#      virt-manager --show-domain-console win11
-
-# 3. Windows インストール後: VM 構成 + ホスト→ゲスト鍵 + 設定（何度でも再実行可）
+# 2. セットアップ（VM が無ければ作成を提案 → 構成 → 鍵 → ペアリング CD をアタッチ。何度でも再実行可）
 ujust vypr-setup
 
-# 4. ゲスト側: vypr-setup.exe を ~/Downloads へ出して公開鍵を表示
-ujust vypr-guest-exe
+# 3. コンソールで Windows をインストール:
+#    virt-manager --connect qemu:///system --show-domain-console win11
 
-# 5. Windows にコピーして実行 → 公開鍵を貼り付け → Windows 再起動
-# 6. アプリ登録（VM が起動していなければ起動します）
+# 4. Windows 側: ペアリング CD を開いて pair.cmd を実行 → 公開鍵を貼り付け → 実行 → 再起動
+
+# 5. アプリ登録（VM が起動していなければ起動します）
 ujust vypr-detect            # ゲストのショートカット/Steam を検出して選択
 # または: vypr add fivem 'C:\Users\You\Desktop\FiveM.lnk' --name FiveM
 ```
 
-- `vypr-create-vm` は Windows インストーラーが追加ドライバー無しで動くよう SATA/e1000e で作り、USB タブレットを追加しません（マウスは最初から相対）。GPU をアタッチした場合は libvirt が VM 実行中だけホストドライバーからデタッチします（managed hostdev）。ブート GPU は候補から除外します。
+- `vypr-create-vm` は Windows インストーラーが追加ドライバー無しで動くよう SATA/e1000e で作ります（virt-install の既定で USB タブレットが付きますが、インストール中のマウスが楽になるだけで、`ujust vypr-setup` のドメイン編集で除去されます）。GPU をアタッチした場合は libvirt が VM 実行中だけホストドライバーからデタッチします（managed hostdev）。ブート GPU は候補から除外します。
 - ISO の置き場に非 UTF-8 のファイル名があると virt-install がボリューム列挙で落ちるため、その場合だけ ISO を `~/.local/share/vypr/iso/` にハードリンクして使います。
 - 登録したアプリは `~/.local/share/applications/vypr-<app>.desktop` に書かれ、`$HOME` 共有経由でランチャーの「コンテナ（hyprtomic-gui）」ソースにそのまま並びます。GUI コンテナ内の `/usr/bin/vypr` は `distrobox-host-exec` でホストの実体へ転送するので、ランチャーからも通常のホストターミナルからも同じエントリで起動できます。
 - Hyprland では `vypr-*` ウィンドウを既定で **float** にし（サイズはゲスト側が所有するため）、`idle_inhibit=focus` と `no_blur` を付けています（`hyprland.lua` の `float-vypr` ルール。ゲームもウィンドウ表示前提）。変更したい場合は `local.conf` で上書きできます。
@@ -90,6 +85,14 @@ ujust vypr-detect            # ゲストのショートカット/Steam を検出
   - ブート時にカードを渡したくない場合は Vypr の GPU swap（`ujust vypr-gpu-swap` が手順を表示。libvirt フックを `/etc/libvirt/hooks/qemu` に置く方式）が使えます。`vypr-create-vm` / virt-manager の hostdev は `managed='yes'` なので、libvirt 自身が起動時だけデタッチする方式です。どちらもイメージ更新に上書きされません。
   - BlueBuild はビルド時に `/var` を消すため、libvirt の状態ディレクトリはイメージに含まれません。`latest-vypr` は `tmpfiles.d` で再作成・再ラベル（SELinux）し、`virtnetworkd` が既定ネットワークを起動できるようにしています（古いブートでラベルが壊れていても ujust の root ステップが修復します）。
 - **注意**: `vypr-setup.exe` を実行した Windows は「Lock pages in memory」権限と自動ログイン、SSH サーバー、任意で UAC 無効化（`OPEN_ELEVATION=1`）が設定されます。UAC の無効化は VM のセキュリティを下げるので、`vypr open-elevation --remove` で戻せます。`ujust vypr-doctor` が現在の状態を確認できます。
+- **Chromium 系アプリ（Edge など）が表示されないとき**: upstream のエージェントは `WS_EX_NOREDIRECTIONBITMAP` のウィンドウを除外するため、DirectComposition を使う Chromium アプリは `vypr run` から見えないことがあります（upstream master でも同じ・報告予定）。`--disable-direct-composition` 付きで起動すると表示されます。**Chromium は既に Edge が動いていると新しい起動の引数を無視し、既存プロセスに窓を任せる**ため、起動スクリプトでは先に全部終了させてください。例: `run-edge-flag.cmd` に
+  ```
+  taskkill /f /im msedge.exe
+  timeout /t 2 /nobreak
+  start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --disable-direct-composition
+  ```
+  を書き、登録タスク（`schtasks /delete` → `/create ... /tr "cmd /c C:\Users\<you>\run-edge-flag.cmd" /sc once /st 00:00 /it /rl limited /f`）の起動先をそれに差し替える。`vypr add` をやり直すとタスクが再生成されるため、その都度差し替えが必要です。起動のたびに Edge を終了→再起動するのでタブは Edge のセッション復元に頼ることになります。
+- **ゲスト側の電源設定**: アイドルでゲストのディスプレイ/sleep が切れると再描画が止まり、キャプチャが飢餓してホストのウィンドウがフリーズします。`ujust vypr-setup` はゲストへ SSH が通るようになると `powercfg /change monitor-timeout-* 0`・`standby-timeout-* 0`・`powercfg /h off` を冪等に適用します（ペアリング後に再実行）。
 
 ## インストール
 
